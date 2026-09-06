@@ -145,14 +145,28 @@ impl RowFormat {
 
 /// Native message markers are heuristics; unknown rows keep an empty margin.
 pub fn speaker_labels(rows: &[Vec<vt100::Cell>], agent: Option<&str>) -> Vec<Option<String>> {
-    let mut fenced = false;
-    rows.iter()
+    let texts: Vec<String> = rows
+        .iter()
         .map(|cells| {
-            let agent = agent?;
-            let text: String = cells
+            cells
                 .iter()
                 .map(|c| if c.has_contents() { c.contents() } else { " " })
-                .collect();
+                .collect()
+        })
+        .collect();
+    let minimal = agent == Some("grok")
+        && texts.iter().any(|text| {
+            let text = text.trim();
+            text.starts_with("minimal ·")
+                || (text.starts_with("Grok ") && text.contains("ctrl+o transcript"))
+        });
+    let mut fenced = false;
+    let mut reply_pending = false;
+    let mut message_gap = false;
+    texts
+        .iter()
+        .map(|text| {
+            let agent = agent?;
             let trimmed = text.trim_start();
             if trimmed.starts_with("```") {
                 fenced = !fenced;
@@ -162,18 +176,44 @@ pub fn speaker_labels(rows: &[Vec<vt100::Cell>], agent: Option<&str>) -> Vec<Opt
                 return None;
             }
             let indent = text.chars().take_while(|c| *c == ' ').count();
-            let grok_composer = agent == "grok" && indent == 2 && trimmed.starts_with("│ ❯ ");
-            let grok_message = agent == "grok" && indent == 5;
-            if (indent <= 2 && trimmed.starts_with("› "))
-                || (grok_message && trimmed.starts_with("❯ "))
-                || grok_composer
-            {
-                Some("you:".into())
-            } else if (indent <= 2
+            let grok_prompt =
+                agent == "grok" && (trimmed.starts_with("❯ ") || trimmed.trim_end() == "❯");
+            let grok_composer = agent == "grok" && trimmed.starts_with("│ ❯ ");
+            if (indent <= 2 && trimmed.starts_with("› ")) || grok_prompt || grok_composer {
+                reply_pending = minimal && grok_prompt && trimmed.trim_end() != "❯";
+                message_gap = false;
+                return Some("you:".into());
+            }
+            if minimal {
+                if trimmed.trim().is_empty() {
+                    message_gap = true;
+                    return None;
+                }
+                if trimmed.starts_with("┃") {
+                    reply_pending = true;
+                    message_gap = true;
+                    return trimmed.starts_with("┃◆ ").then(|| "grok:".into());
+                }
+                if trimmed.starts_with("Worked for ")
+                    || trimmed.starts_with("minimal ·")
+                    || (trimmed.starts_with("Grok ") && trimmed.contains("ctrl+o transcript"))
+                {
+                    reply_pending = false;
+                    return None;
+                }
+                if trimmed.starts_with(|c| ('\u{2800}'..='\u{28ff}').contains(&c)) {
+                    return None;
+                }
+                if reply_pending && message_gap {
+                    reply_pending = false;
+                    return Some("grok:".into());
+                }
+            }
+            if (indent <= 2
                 && ["• ", "● "]
                     .iter()
                     .any(|prefix| trimmed.starts_with(prefix)))
-                || (grok_message && timestamped(trimmed))
+                || (agent == "grok" && timestamped(trimmed))
             {
                 Some(format!("{agent}:"))
             } else {

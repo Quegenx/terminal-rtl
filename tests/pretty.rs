@@ -240,3 +240,27 @@ fn attribution_stays_below_native_content_across_redraw_and_resize() {
         "Powered by: Gal Havkin"
     );
 }
+
+#[test]
+fn grok_minimal_labels_plain_replies_without_labeling_status_or_input_continuations() {
+    let mut parser = vt100::Parser::new(16, 72, 0);
+    parser.process("❯ hello\r\ncontinued user input\r\n\r\n┃◆ Thought for 0.2s\r\n┃thinking text\r\nhello\r\nWorked for 1.5s\r\n\r\n❯ second message\r\n\r\nplain reply\r\nminimal · /help\r\n❯\r\nGrok 4.6 (high) · ctrl+o transcript".as_bytes());
+    let grid: Vec<Vec<_>> = (0..16)
+        .map(|row| {
+            (0..72)
+                .map(|col| parser.screen().cell(row, col).unwrap().clone())
+                .collect()
+        })
+        .collect();
+    let labels = terminal_rtl::pretty::speaker_labels(&grid, Some("grok"));
+    assert_eq!(labels[0].as_deref(), Some("you:"));
+    assert_eq!(labels[1], None);
+    assert_eq!(labels[3].as_deref(), Some("grok:"));
+    assert_eq!(labels[5].as_deref(), Some("grok:"));
+    assert_eq!(labels[6], None);
+    assert_eq!(labels[8].as_deref(), Some("you:"));
+    assert_eq!(labels[10].as_deref(), Some("grok:"));
+    assert_eq!(labels[11], None);
+    assert_eq!(labels[12].as_deref(), Some("you:"));
+    assert_eq!(labels[13], None);
+}

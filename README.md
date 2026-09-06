@@ -51,7 +51,7 @@ fence delimiters. Active input and incomplete tables are left alone.
 A small eight-column margin shows `you:` and `codex:` / `grok:` beside recognized
 native message starts. The child terminal is resized to fit this margin, and
 cursor/mouse coordinates account for it. Labels are inferred from native markers
-(and Grok's timestamped message rows), so unfamiliar layouts can miss labels or
+(including Grok's full-screen and minimal layouts), so unfamiliar layouts can miss labels or
 misclassify matching text. No semantic conversation API is used.
 
 Set `RTL_PRETTY=0` to use only RTL correction. For direct invocation, use
@@ -282,6 +282,6 @@ For local packing, place release binaries at `native/darwin-arm64/rtl` and
 `bun pm pack --destination dist`. Packing fails if a required binary is missing.
 There are no install scripts and no downloads at launch time.
 
-Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.0.tgz`.
+Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.1.tgz`.
 Registry publication is separate from preparing the package. Homebrew is not
 configured in this release.

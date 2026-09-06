@@ -1,6 +1,6 @@
 [package]
 name = "terminal-rtl"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Hebrew RTL display correction and lightweight formatting for native terminal AI agents."
 license = "MIT"
