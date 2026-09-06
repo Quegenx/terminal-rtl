@@ -337,7 +337,7 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                             parser.screen().history_since(mirrored_history).collect();
                         renderer.append_history(
                             &history,
-                            parser.screen().size().1,
+                            current_size,
                             enabled,
                             args.direction,
                             &mut out,

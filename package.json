@@ -1,7 +1,7 @@
 {
   "name": "terminal-rtl",
   "description": "Hebrew RTL display correction and lightweight formatting for native terminal AI agents.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -15,7 +15,7 @@
   "scripts": {
     "start": "bun bin/codex-rtl.mjs",
     "grok": "bun bin/grok-rtl.mjs",
-    "test": "bun test tests/native-launchers.test.mjs",
+    "test": "bun test tests/*.test.mjs",
     "prepack": "node scripts/check-package.mjs"
   },
   "license": "MIT",
@@ -31,5 +31,8 @@
     "README.md",
     "THIRD_PARTY_LICENSES.txt"
   ],
-  "author": "Gal Havkin"
+  "author": "Gal Havkin",
+  "devDependencies": {
+    "@xterm/headless": "6.0.0"
+  }
 }

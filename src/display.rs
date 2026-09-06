@@ -325,7 +325,7 @@ impl Renderer {
     pub fn append_history(
         &mut self,
         rows: &[Vec<vt100::Cell>],
-        width: u16,
+        host_size: (u16, u16),
         enabled: bool,
         direction: Direction,
         out: &mut impl Write,
@@ -341,11 +341,14 @@ impl Renderer {
         let labels = crate::pretty::speaker_labels(rows, self.agent_label.as_deref());
         out.write_all(b"\x1b[?25l\x1b[r")?;
         for (index, cells) in rows.iter().enumerate() {
+            let width = host_size.0.saturating_sub(self.margin());
             let cells = &cells[..cells.len().min(usize::from(width))];
             let visual = formatted_row(cells, enabled, direction, &formats[index]);
             out.write_all(b"\x1b[1;1H\x1b[0m")?;
             self.write_row(&visual, labels[index].as_deref(), out)?;
-            out.write_all(b"\x1b[0m\x1b[K\x1b[1S")?;
+            // SU (CSI S) discards rows in hosts such as xterm.js. A line feed
+            // at the bottom of the full viewport saves the top row to history.
+            write!(out, "\x1b[0m\x1b[K\x1b[{};1H\r\n", host_size.1)?;
         }
         self.invalidate();
         Ok(())

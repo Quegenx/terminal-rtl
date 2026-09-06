@@ -34,6 +34,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
       - run: bun test
       - run: node --test tests/native-launchers.test.mjs
       - uses: actions/upload-artifact@v4

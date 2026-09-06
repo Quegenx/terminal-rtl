@@ -235,6 +235,8 @@ The file may include conversation contents. It is not a timing-aware recording.
 cargo test --locked
 cargo fmt --check
 cargo clippy --all-targets --locked -- -D warnings
+bun install --frozen-lockfile
+bun test
 ```
 
 For a CPU-only display benchmark, run `cargo run --release --example benchmark`.
@@ -247,6 +249,12 @@ cursor replies, paste Hebrew, resize the terminal, toggle correction, forward
 Ctrl+C, check exit codes, and check terminal restoration. Other tests cover
 mixed text, punctuation, marks, colours, borders, wide glyphs, wrapping, erase,
 alternate screens, scrollback, and input encoding.
+
+The host scrollback test also feeds a synthetic PTY transcript into xterm.js,
+independently of the wrapper's parser. It checks that resumed rows reach native
+history and that the composer and footer remain visible. History is appended
+with line feeds at the bottom of the viewport: `CSI S` can discard rows instead
+of saving them in a host terminal.
 
 `.github/workflows/ci.yml` tests and builds on macOS, Windows, and Linux. It uploads
 native binaries as workflow artifacts; no remote workflow has been run merely
@@ -289,7 +297,7 @@ For local packing, place release binaries at `native/darwin-arm64/rtl` and
 `bun pm pack --destination dist`. Packing fails if a required binary is missing.
 There are no install scripts and no downloads at launch time.
 
-Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.3.tgz`.
+Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.4.tgz`.
 Registry publication is separate from preparing the package. Homebrew is not
 configured in this release.
 
