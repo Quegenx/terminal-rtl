@@ -2,3 +2,5 @@
 /dist/
 *.cast
 node_modules/
+/native/
+*.tgz

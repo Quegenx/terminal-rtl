@@ -33,7 +33,7 @@ impl Harness {
         command.env("RTL_TEST_SCENARIO", scenario);
         command.env_remove("RTL_ACTIVE");
         if scenario == "interactive-label" {
-            command.args(["--pretty", "--agent-label", "codex"]);
+            command.args(["--pretty", "--agent-label", "codex", "--attribution"]);
         }
         command.arg(std::env::current_exe().unwrap());
         command.args(["--exact", "fixture", "--nocapture"]);
@@ -148,6 +148,11 @@ fn fixture() {
             std::process::exit(17);
         }
         "interactive" | "interactive-label" => {
+            let expected_rows = if scenario == "interactive-label" {
+                13
+            } else {
+                14
+            };
             let expected_cols = if scenario == "interactive-label" {
                 62
             } else {
@@ -155,7 +160,7 @@ fn fixture() {
             };
             assert_eq!(
                 crossterm::terminal::size().unwrap(),
-                (expected_cols - 10, 12)
+                (expected_cols - 10, expected_rows - 2)
             );
             crossterm::terminal::enable_raw_mode().unwrap();
             out.write_all("שלום\x1b[6n".as_bytes()).unwrap();
@@ -174,12 +179,15 @@ fn fixture() {
             let mut trigger = [0];
             input.read_exact(&mut trigger).unwrap();
             let deadline = Instant::now() + Duration::from_secs(3);
-            while crossterm::terminal::size().unwrap() != (expected_cols, 14)
+            while crossterm::terminal::size().unwrap() != (expected_cols, expected_rows)
                 && Instant::now() < deadline
             {
                 thread::sleep(Duration::from_millis(10));
             }
-            assert_eq!(crossterm::terminal::size().unwrap(), (expected_cols, 14));
+            assert_eq!(
+                crossterm::terminal::size().unwrap(),
+                (expected_cols, expected_rows)
+            );
             out.write_all(b"RESIZE_OK\r\n").unwrap();
             out.flush().unwrap();
             input.read_exact(&mut trigger).unwrap();

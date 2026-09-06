@@ -171,7 +171,13 @@ fn resolve_windows_command(name: &std::ffi::OsStr) -> std::path::PathBuf {
 pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
     let (cols, rows) = terminal::size().context("cannot read terminal size")?;
     let margin = if args.agent_label.is_some() { 8 } else { 0 };
-    let initial = size(cols.saturating_sub(margin), rows);
+    let child_size = |cols: u16, rows: u16| {
+        size(
+            cols.saturating_sub(margin),
+            rows.saturating_sub(u16::from(args.attribution && rows > 1)),
+        )
+    };
+    let initial = child_size(cols, rows);
     let pair = native_pty_system()
         .openpty(initial)
         .context("cannot create pseudo-terminal")?;
@@ -228,6 +234,7 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
             let mut renderer = Renderer::default();
             renderer.set_pretty(args.pretty);
             renderer.set_agent_label(args.agent_label.as_deref());
+            renderer.set_attribution(args.attribution && rows > 1);
             let mut enabled = !args.no_bidi;
             let mut prefix = false;
             let mut mouse_capture = false;
@@ -238,7 +245,7 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
             let mut exit_time = None;
             let mut last_render = Instant::now() - Duration::from_secs(1);
             let mut sync_started = None;
-            let mut current_size = (initial.cols, initial.rows);
+            let mut current_size = (cols, rows);
             let mut last_size_check = Instant::now();
             let mut out = io::stdout();
             loop {
@@ -247,9 +254,10 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                 if last_size_check.elapsed() >= Duration::from_millis(200) {
                     last_size_check = Instant::now();
                     if let Ok((cols, rows)) = terminal::size() {
-                        let next = size(cols.saturating_sub(margin), rows);
-                        if (next.cols, next.rows) != current_size {
-                            current_size = (next.cols, next.rows);
+                        let next = child_size(cols, rows);
+                        if (cols, rows) != current_size {
+                            current_size = (cols, rows);
+                            renderer.set_attribution(args.attribution && rows > 1);
                             parser.screen_mut().set_size(next.rows, next.cols);
                             pair.master.resize(next)?;
                             renderer.invalidate();
@@ -404,8 +412,9 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                         paste_bytes(&text, parser.screen().bracketed_paste())
                     }
                     Event::Resize(cols, rows) => {
-                        let size = size(cols.saturating_sub(margin), rows);
-                        current_size = (size.cols, size.rows);
+                        let size = child_size(cols, rows);
+                        current_size = (cols, rows);
+                        renderer.set_attribution(args.attribution && rows > 1);
                         parser.screen_mut().set_size(size.rows, size.cols);
                         pair.master.resize(size)?;
                         renderer.invalidate();
@@ -414,7 +423,11 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                     }
                     Event::FocusGained if parser.callbacks().focus_events => b"\x1b[I".to_vec(),
                     Event::FocusLost if parser.callbacks().focus_events => b"\x1b[O".to_vec(),
-                    Event::Mouse(mouse) if scrollback == 0 && mouse.column >= margin => {
+                    Event::Mouse(mouse)
+                        if scrollback == 0
+                            && mouse.column >= margin
+                            && mouse.row < parser.screen().size().0 =>
+                    {
                         mouse_bytes(
                             mouse,
                             parser.screen().mouse_protocol_mode(),

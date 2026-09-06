@@ -201,3 +201,42 @@ fn native_grok_transcript_and_boxed_composer_get_full_labels() {
         ]
     );
 }
+
+#[test]
+fn attribution_stays_below_native_content_across_redraw_and_resize() {
+    let mut parser = vt100::Parser::new(5, 40, 0);
+    let mut renderer = Renderer::default();
+    renderer.set_attribution(true);
+    let mut host = vt100::Parser::new(6, 40, 0);
+    for text in [
+        "\x1b[2J\x1b[H› hello\x1b[5;1HNative status",
+        "\x1b[2J\x1b[H› שלום\x1b[5;1HUpdated status",
+    ] {
+        parser.process(text.as_bytes());
+        let mut bytes = Vec::new();
+        renderer
+            .render(parser.screen(), true, Direction::Auto, &mut bytes)
+            .unwrap();
+        host.process(&bytes);
+        assert_eq!(
+            host.screen().rows(0, 40).nth(5).unwrap(),
+            "Powered by: Gal Havkin"
+        );
+        assert_eq!(
+            host.screen().cursor_position(),
+            parser.screen().cursor_position()
+        );
+        assert!(host.screen().rows(0, 40).nth(4).unwrap().contains("status"));
+    }
+    parser.screen_mut().set_size(3, 30);
+    host.screen_mut().set_size(4, 30);
+    let mut bytes = Vec::new();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut bytes)
+        .unwrap();
+    host.process(&bytes);
+    assert_eq!(
+        host.screen().rows(0, 30).nth(3).unwrap(),
+        "Powered by: Gal Havkin"
+    );
+}

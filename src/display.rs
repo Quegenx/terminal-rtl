@@ -239,12 +239,20 @@ pub struct Renderer {
     cursor: Option<(u16, u16, bool)>,
     settings: Option<(bool, Direction, (u16, u16), usize)>,
     pretty: bool,
+    attribution: bool,
     agent_label: Option<String>,
     labels: Vec<Option<String>>,
     formats: Vec<crate::pretty::RowFormat>,
 }
 
 impl Renderer {
+    pub fn set_attribution(&mut self, enabled: bool) {
+        if self.attribution != enabled {
+            self.attribution = enabled;
+            self.invalidate();
+        }
+    }
+
     pub fn set_agent_label(&mut self, agent: Option<&str>) {
         let label = agent
             .filter(|name| matches!(*name, "codex" | "grok"))
@@ -382,6 +390,16 @@ impl Renderer {
         if !updates.is_empty() || self.cursor != Some(cursor) {
             out.write_all(b"\x1b[?25l")?;
             out.write_all(&updates)?;
+            if self.attribution {
+                let credit = "Powered by: Gal Havkin";
+                let visible = &credit[..credit.len().min(usize::from(width + self.margin()))];
+                write!(
+                    out,
+                    "\x1b[{};1H\x1b[0;1;36m{}\x1b[0m\x1b[K",
+                    height + 1,
+                    visible
+                )?;
+            }
             write!(out, "\x1b[0m\x1b[{};{}H", row + 1, visual_col + 1)?;
             if !cursor.2 {
                 out.write_all(b"\x1b[?25h")?;

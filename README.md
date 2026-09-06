@@ -1,25 +1,46 @@
 # Terminal RTL
 
+**Powered by: Gal Havkin**
+
+The creator credit stays visible in a reserved footer row during interactive sessions.
+
 Hebrew RTL display correction and lightweight formatting for native terminal AI agents.
 
-**Use the original Codex and Grok CLIs with RTL correction:**
+Run the original Codex or Grok CLI with RTL correction and lightweight formatting.
+
+## Install and run
 
 ```sh
+npx terminal-rtl codex
+npx terminal-rtl grok
+
+# Bun, including systems without Node installed:
+bunx --bun terminal-rtl codex
+bunx --bun terminal-rtl grok
+```
+
+For permanent commands:
+
+```sh
+bun add --global terminal-rtl
+# Or: npm install --global terminal-rtl
 codex-rtl
 grok-rtl
 ```
 
-These launch the installed CLIs themselves. Their native status lines, slash
-commands, themes, configuration, model selection, and key bindings remain in
-charge. All CLI arguments pass through unchanged, including `--version`,
-`--model`, `resume`, and other native commands. No extra agent tool is installed.
+Install the original Codex or Grok CLI first. The package includes the native RTL
+engine and selects it automatically; no ZIP downloads or Rust installation are
+needed. Bundled platforms: macOS Apple Silicon and Windows x64. Other platforms
+currently need a source build and `RTL_BIN` pointing to the resulting executable.
+The JavaScript launchers work with Node 18+ or Bun and have no package dependencies.
+Node-shebang commands installed globally require Node on PATH; Bun-only users can
+use `bunx --bun` as shown above.
 
-Install the Bun launchers once from this directory: `bun link`.
-The launchers use Bun's built-ins and have no package dependencies.
-The Rust wrapper must be built or installed as described below. Bun's bin
-directory must be on PATH. `RTL_CODEX_BIN`, `RTL_GROK_BIN`, and `RTL_BIN` can
-select explicit executables. Piped/noninteractive commands run directly so
-machine-readable output and exit codes stay native.
+Native status lines, slash commands, themes, configuration, model selection, and
+key bindings remain controlled by the original CLI. All CLI arguments pass through
+unchanged. No extra agent tool is installed. `RTL_CODEX_BIN`, `RTL_GROK_BIN`, and
+`RTL_BIN` select explicit executables. Piped/noninteractive commands run directly
+so machine-readable output and exit codes stay native.
 
 The native launchers enable conservative display formatting: aligned Markdown
 tables get Unicode separators and bold headers. H1 is bold and underlined;
@@ -58,14 +79,7 @@ with every agent or terminal protocol. macOS PTY integration tests pass locally;
 Windows code has been compiled into a native executable. Native Windows runtime
 verification remains necessary. CI includes the same PTY tests on Windows.
 
-## Start here
-
-Ready-to-run archives are in `dist/`: `rtl-macos-arm64.zip` (Apple Silicon) and
-`rtl-windows-x64.zip` (Windows 10/11 x64). Unzip one and run `./rtl --demo` on Mac
-or `.\rtl.exe --demo` in PowerShell. To use it from any project, put the extracted
-folder on PATH. You do not need Rust to run these binaries.
-
-To build from source:
+## Build from source
 
 Install [Rust stable](https://doc.rust-lang.org/stable/book/ch01-01-installation.html).
 On Windows, use the MSVC toolchain and install the C++ build tools requested by
@@ -255,3 +269,19 @@ crate source. Primary references:
 [vt100](https://docs.rs/vt100/0.16.2/vt100/),
 [unicode-bidi](https://docs.rs/unicode-bidi/0.3.18/unicode_bidi/),
 [crossterm](https://docs.rs/crossterm/0.29.0/crossterm/).
+
+## Maintainer packaging
+
+GitHub Actions builds and tests the native engine, then assembles a single npm
+package containing macOS arm64 and Windows x64 binaries. Download its
+`npm-package` artifact to get the publishable `.tgz`. Linux is tested at source
+level but is not yet a bundled platform.
+
+For local packing, place release binaries at `native/darwin-arm64/rtl` and
+`native/win32-x64/rtl.exe`, keep `THIRD_PARTY_LICENSES.txt` current, then run
+`bun pm pack --destination dist`. Packing fails if a required binary is missing.
+There are no install scripts and no downloads at launch time.
+
+Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.0.tgz`.
+Registry publication is separate from preparing the package. Homebrew is not
+configured in this release.

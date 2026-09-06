@@ -46,6 +46,9 @@ struct Args {
     /// Show you:/agent: labels beside recognized native message markers.
     #[arg(long, value_parser = ["codex", "grok"])]
     agent_label: Option<String>,
+    /// Keep creator attribution visible in a reserved footer row.
+    #[arg(long)]
+    attribution: bool,
     #[arg(long, hide = true)]
     demo_child: bool,
     /// Command and arguments, passed directly without shell evaluation.
