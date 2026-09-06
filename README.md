@@ -1,0 +1,257 @@
+# Terminal RTL
+
+Hebrew RTL display correction and lightweight formatting for native terminal AI agents.
+
+**Use the original Codex and Grok CLIs with RTL correction:**
+
+```sh
+codex-rtl
+grok-rtl
+```
+
+These launch the installed CLIs themselves. Their native status lines, slash
+commands, themes, configuration, model selection, and key bindings remain in
+charge. All CLI arguments pass through unchanged, including `--version`,
+`--model`, `resume`, and other native commands. No extra agent tool is installed.
+
+Install the Bun launchers once from this directory: `bun link`.
+The launchers use Bun's built-ins and have no package dependencies.
+The Rust wrapper must be built or installed as described below. Bun's bin
+directory must be on PATH. `RTL_CODEX_BIN`, `RTL_GROK_BIN`, and `RTL_BIN` can
+select explicit executables. Piped/noninteractive commands run directly so
+machine-readable output and exit codes stay native.
+
+The native launchers enable conservative display formatting: aligned Markdown
+tables get Unicode separators and bold headers. H1 is bold and underlined;
+H2 and H3 use distinct accent colors. Existing CLI colors take precedence.
+List markers are bold, quotes italic, and fenced code stays readable with dim
+fence delimiters. Active input and incomplete tables are left alone.
+
+A small eight-column margin shows `you:` and `codex:` / `grok:` beside recognized
+native message starts. The child terminal is resized to fit this margin, and
+cursor/mouse coordinates account for it. Labels are inferred from native markers
+(and Grok's timestamped message rows), so unfamiliar layouts can miss labels or
+misclassify matching text. No semantic conversation API is used.
+
+Set `RTL_PRETTY=0` to use only RTL correction. For direct invocation, use
+`rtl --pretty --agent-label codex -- codex` (or `grok` for both names).
+Native Unicode tables keep their own presentation. Formatting and labels affect
+the live screen; retained output replay uses original text with RTL correction.
+
+This is automatic output formatting, **not the entire json-render interactive
+component catalog**. Ordinary terminal output cannot define arbitrary form
+state and actions. The obsolete replacement UI and its `rtl-ui` command have
+been removed; use `codex-rtl` or `grok-rtl` instead.
+
+CLI updates are picked up on the next launch because the actual installed
+executables are used. No CLI source fork or pinned app-server protocol is
+involved in native mode. New terminal escape protocols may still need wrapper
+compatibility fixes; compatibility with every future release is not guaranteed.
+
+Run agents with readable Hebrew **inside your existing VS Code terminal**.
+`rtl` starts the command in a pseudo-terminal, interprets its screen updates,
+and reorders Hebrew for display. Prompts and agent output remain in logical
+order inside the child process. It does not call an AI API or require an API key.
+
+This is an initial working implementation, not a guarantee of compatibility
+with every agent or terminal protocol. macOS PTY integration tests pass locally;
+Windows code has been compiled into a native executable. Native Windows runtime
+verification remains necessary. CI includes the same PTY tests on Windows.
+
+## Start here
+
+Ready-to-run archives are in `dist/`: `rtl-macos-arm64.zip` (Apple Silicon) and
+`rtl-windows-x64.zip` (Windows 10/11 x64). Unzip one and run `./rtl --demo` on Mac
+or `.\rtl.exe --demo` in PowerShell. To use it from any project, put the extracted
+folder on PATH. You do not need Rust to run these binaries.
+
+To build from source:
+
+Install [Rust stable](https://doc.rust-lang.org/stable/book/ch01-01-installation.html).
+On Windows, use the MSVC toolchain and install the C++ build tools requested by
+the Rust installer. On macOS, install Xcode Command Line Tools if prompted.
+
+In this project directory, on either platform:
+
+```sh
+cargo install --path . --locked
+rtl --demo
+rtl codex
+```
+
+The demo shows mixed Hebrew/English, numbers, colours, streaming, and Hebrew
+input without calling an agent. `rtl --doctor` prints basic terminal diagnostics.
+
+Alternatively, build without installing:
+
+```sh
+cargo build --release --locked
+```
+
+Run `./target/release/rtl --demo` on Mac, or
+`.\target\release\rtl.exe --demo` in Windows PowerShell.
+
+Agent arguments follow the command unchanged:
+
+```sh
+rtl codex --help
+rtl gemini
+rtl --direction ltr -- your-agent --some-agent-option
+```
+
+You can also wrap a shell once and run commands inside it:
+
+```sh
+rtl zsh
+```
+
+On Windows:
+
+```powershell
+rtl powershell -NoLogo
+```
+
+Native Windows uses ConPTY; WSL is not required. Windows `.cmd`/`.bat` launchers
+(including common npm shims) are launched through an encoded PowerShell command.
+Arguments to those batch files are subject to Windows PowerShell's native command
+argument rules. If a complex argument behaves differently, start a wrapped shell
+and run the command there. Native executable arguments do not go through a shell.
+
+## Make selected agent commands automatic
+
+Optional helpers let you continue typing `codex` instead of `rtl codex`.
+They affect the current shell only unless you add the source commands to your
+shell profile. They refuse to replace existing functions or aliases.
+
+Mac / zsh, from this project directory:
+
+```zsh
+source shell/rtl.zsh
+rtl-wrap codex gemini
+```
+
+Windows / PowerShell:
+
+```powershell
+. .\shell\rtl.ps1
+Enable-RtlCommand -Name codex, gemini
+```
+
+Use the full path to these files when adding them to a shell profile. Remove the
+profile lines and open a fresh terminal to undo the integration. Helpers avoid
+double wrapping when already inside an `rtl` shell.
+
+An agent that **already corrects Hebrew itself** should usually run without this
+wrapper. Otherwise, toggle correction off or start with `rtl --no-bidi agent`.
+There is no reliable way to automatically detect whether Hebrew was pre-reversed.
+
+## During a session
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+] then `r` | Toggle Hebrew correction; the agent keeps running |
+| Ctrl+] then `q` | Terminate the wrapped command and exit |
+| Ctrl+] twice | Send a literal Ctrl+] to the child |
+| Shift+PageUp / Shift+PageDown | Browse retained normal-screen scrollback |
+| Any normal typing key | Return from scrollback to live input |
+| Ctrl+C | Send Ctrl+C to the child as usual |
+
+Some VS Code keybindings intercept these keys. If so, assign a terminal
+`sendSequence` binding for `\u001d` or the relevant key in VS Code.
+
+The wrapper uses the terminal's alternate screen while running, as an interactive
+terminal program does. It does not open a new window or replace VS Code's terminal.
+On exit it restores the original terminal and prints the retained normal-screen
+history and final visible screen into the host's scrollback (without colours).
+Use `--no-replay` to omit that printout. While running, browse history through
+the wrapper's scrollback. Child alternate screens do not add scrollback history.
+
+`--record PATH` optionally writes the child's **original raw PTY output**, including
+ANSI sequences, to a new file. No recording is made by default, existing files
+are never overwritten, and user input is recorded only if the child echoes it.
+The file may include conversation contents. It is not a timing-aware recording.
+
+## What is implemented
+
+- Unix PTY and native Windows ConPTY launch, input, resize, exit status, cleanup.
+- Stateful ANSI parsing through `vt100` (which uses `vte`), including fragmented
+  UTF-8, cursor movement, erase, scrolling, standard colours, and alternate screens.
+- Unicode bidi reordering, bracket mirroring, combining-mark attachment, and
+  wide-cell preservation. English-only text is not reordered.
+- Fixed box-drawing borders, indentation, common prompt markers, and gaps of two
+  or more spaces. These delimit independent text fields.
+- Logical/visual cursor and mouse-coordinate mapping, standard keyboard shortcuts,
+  bracketed paste, and standard xterm mouse events.
+- Logical cursor-position replies, basic device attributes, size queries, focus
+  events, and synchronized-output handling with a timeout.
+- Changed-row rendering, a 60 FPS cap, and a bounded output queue.
+
+## Current limits
+
+- **Mouse-selected Hebrew copies in visual order.** A terminal wrapper cannot
+  make VS Code's selection API recover the original logical text. English-only
+  commands remain in normal order. Recording preserves the original output.
+- This changes text display, not the child application's editing model. Cursor
+  positions are mapped, but Left/Right still follow the child's logical movement.
+- Reordering is per displayed text field/row. Complex soft-wrapped paragraphs,
+  unusual table layouts, and programs that position every glyph themselves need
+  additional compatibility testing. The border/column heuristic can be overridden
+  only by disabling correction; it is not a code/Markdown parser.
+- Advanced emoji clusters inherit the parser's cell-width limitations. Arabic
+  shaping is not provided; Hebrew is the primary target.
+- OSC hyperlinks display their text but do not retain link metadata. Images,
+  clipboard OSCs, extended kitty keyboard protocols, and application-requested
+  window manipulation are not supported. Colour queries use a fixed dark palette.
+- Forced OS termination cannot always restore terminal state. After a hard kill,
+  `reset` on Unix or opening a fresh terminal restores a usable terminal.
+- Agents that depend on unsupported escape sequences may need changes. Codex's
+  interactive startup and Hebrew prompt input were smoke-tested on this Mac,
+  without submitting a prompt. Full conversational workflows still need testing.
+
+## Development
+
+```sh
+cargo test --locked
+cargo fmt --check
+cargo clippy --all-targets --locked -- -D warnings
+```
+
+For a CPU-only display benchmark, run `cargo run --release --example benchmark`.
+On the development Apple Silicon Mac, 2,000 full 24x100 screen updates averaged
+0.300 ms per frame. This excludes terminal I/O and does not measure an agent's
+end-to-end latency.
+
+The PTY tests launch the actual wrapper, stream split UTF-8, verify logical
+cursor replies, paste Hebrew, resize the terminal, toggle correction, forward
+Ctrl+C, check exit codes, and check terminal restoration. Other tests cover
+mixed text, punctuation, marks, colours, borders, wide glyphs, wrapping, erase,
+alternate screens, scrollback, and input encoding.
+
+`.github/workflows/ci.yml` tests and builds on macOS, Windows, and Linux. It uploads
+native binaries as workflow artifacts; no remote workflow has been run merely
+by creating these files locally.
+
+## Architecture
+
+```text
+keyboard / paste ────────────────► child PTY (original text)
+                                      │
+                                      ▼
+                               vt100 / vte parser
+                                      │
+                               logical screen cells
+                                      │
+                            Unicode bidi + mirroring
+                                      │
+                              changed-row renderer
+                                      │
+                                      ▼
+                              existing VS Code terminal
+```
+
+Library APIs were checked using the Context7 and Mintlify MCPs and downloaded
+crate source. Primary references:
+[portable-pty](https://docs.rs/portable-pty/0.9.0/portable_pty/),
+[vt100](https://docs.rs/vt100/0.16.2/vt100/),
+[unicode-bidi](https://docs.rs/unicode-bidi/0.3.18/unicode_bidi/),
+[crossterm](https://docs.rs/crossterm/0.29.0/crossterm/).

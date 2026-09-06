@@ -1,0 +1,24 @@
+[package]
+name = "terminal-rtl"
+version = "0.1.0"
+edition = "2024"
+description = "Hebrew RTL display correction and lightweight formatting for native terminal AI agents."
+license = "MIT"
+
+[[bin]]
+name = "rtl"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+crossterm = "0.29"
+portable-pty = "0.9"
+unicode-bidi = "0.3"
+unicode-bidi-mirroring = "0.4"
+vt100 = "0.16.2"
+
+[profile.release]
+lto = "thin"
+strip = true
