@@ -32,6 +32,9 @@ impl Harness {
         command.env("RTL_TEST_EXPECTED_CWD", cwd);
         command.env("RTL_TEST_SCENARIO", scenario);
         command.env_remove("RTL_ACTIVE");
+        if scenario == "inline-history" {
+            command.args(["--inline", "--attribution", "--no-replay"]);
+        }
         if scenario == "interactive-label" {
             command.args(["--pretty", "--agent-label", "codex", "--attribution"]);
         }
@@ -121,6 +124,41 @@ fn fixture() {
     let mut input = std::io::stdin();
     out.write_all(b"\x1b[2J\x1b[H").unwrap();
     match scenario.as_str() {
+        "inline-history" => {
+            crossterm::terminal::enable_raw_mode().unwrap();
+            // Codex resume scrolls a top region while keeping its composer fixed.
+            out.write_all(b"\x1b[1;8r\x1b[1;1H").unwrap();
+            for line in 0..50 {
+                write!(out, "RESUMED_{line:03}\r\n").unwrap();
+            }
+            out.write_all(b"\x1b[r\x1b[10;1HINLINE_DRAFT_READY")
+                .unwrap();
+            out.flush().unwrap();
+            let mut key = [0];
+            input.read_exact(&mut key).unwrap();
+            assert_eq!(key, [b'x']);
+            std::process::exit(0);
+        }
+        "wheel" => {
+            crossterm::terminal::enable_raw_mode().unwrap();
+            for line in 0..50 {
+                write!(out, "WHEEL_HISTORY_{line:03}\r\n").unwrap();
+            }
+            out.write_all(b"SCROLL_READY draft").unwrap();
+            out.flush().unwrap();
+            let mut typed = [0];
+            input.read_exact(&mut typed).unwrap();
+            assert_eq!(typed, [b'x'], "scrolling must not send prompt-history keys");
+            out.write_all(b"\r\n\x1b[?1000h\x1b[?1006hNATIVE_MOUSE_READY")
+                .unwrap();
+            out.flush().unwrap();
+            let mut wheel = [0; 10];
+            input.read_exact(&mut wheel).unwrap();
+            assert_eq!(&wheel, b"\x1b[<65;4;5M");
+            out.write_all(b"\r\nWHEEL_OK").unwrap();
+            out.flush().unwrap();
+            std::process::exit(0);
+        }
         "delete" => {
             crossterm::terminal::enable_raw_mode().unwrap();
             out.write_all(b"DELETE_READY").unwrap();
@@ -278,4 +316,53 @@ fn retained_history_is_replayed_after_exit() {
     let replay = output.rsplit("\x1b[?1049l").next().unwrap();
     assert!(replay.contains("HISTORY_000"), "{replay:?}");
     assert!(replay.contains("HISTORY_049"));
+}
+
+#[test]
+fn real_pty_wheel_browses_history_without_changing_draft_and_preserves_native_mouse() {
+    let mut harness = Harness::new("wheel");
+    harness.until("SCROLL_READY draft");
+    assert!(String::from_utf8_lossy(&harness.output).contains("\x1b[?1006h"));
+    harness.output.clear();
+    harness.send(b"\x1b[<64;4;5M".repeat(10).as_slice());
+    harness.until("WHEEL_HISTORY_010");
+    harness.output.clear();
+    harness.send(b"\x1b[<65;4;5M".repeat(10).as_slice());
+    harness.until("SCROLL_READY draft");
+    harness.send(b"x");
+    harness.until("NATIVE_MOUSE_READY");
+    harness.send(b"\x1b[<65;4;5M");
+    assert_eq!(harness.finish(), 0);
+    assert!(String::from_utf8_lossy(&harness.output).contains("WHEEL_OK"));
+}
+
+#[test]
+fn inline_resume_uses_native_history_and_leaves_selection_to_the_terminal() {
+    let mut harness = Harness::new("inline-history");
+    harness.until("INLINE_DRAFT_READY");
+    let output = String::from_utf8_lossy(&harness.output);
+    assert!(
+        !output.contains("\x1b[?1049h"),
+        "native scrolling requires the normal buffer"
+    );
+    assert!(
+        !output.contains("\x1b[?1006h"),
+        "selection must not be captured when the child does not request mouse events"
+    );
+    let mut host = vt100::Parser::new(12, 60, 1000);
+    host.process(b"EARLIER_SHELL_OUTPUT");
+    host.process(&harness.output);
+    assert!(!host.screen().alternate_screen());
+    let history: Vec<_> = host.screen().history_since(0).collect();
+    let text: String = history
+        .iter()
+        .flat_map(|row| row.iter().map(|cell| cell.contents()))
+        .collect();
+    assert!(text.contains("EARLIER_SHELL_OUTPUT"));
+    assert!(text.contains("RESUMED_000"));
+    assert!(text.contains("RESUMED_040"));
+    assert!(host.screen().contents().contains("INLINE_DRAFT_READY"));
+    assert!(host.screen().contents().contains("Powered by: Gal Havkin"));
+    harness.send(b"x");
+    assert_eq!(harness.finish(), 0);
 }

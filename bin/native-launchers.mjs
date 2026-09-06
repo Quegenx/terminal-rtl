@@ -32,7 +32,7 @@ export function launchNativeAgent(agent, args = process.argv.slice(2)) {
     return;
   }
   let command = interactive ? wrapper : executable;
-  let parameters = interactive ? ['--attribution', ...(env.RTL_PRETTY === '0' ? [] : ['--pretty', '--agent-label', agent]), '--', executable, ...args] : args;
+  let parameters = interactive ? ['--inline', '--attribution', ...(env.RTL_PRETTY === '0' ? [] : ['--pretty', '--agent-label', agent]), '--', executable, ...args] : args;
   if (!interactive && process.platform === 'win32' && /\.(cmd|bat)$/i.test(extname(command))) {
     const quote = value => "'" + value.replaceAll("'", "''") + "'";
     const script = '& ' + [command, ...parameters].map(quote).join(' ') + '; exit $LASTEXITCODE';

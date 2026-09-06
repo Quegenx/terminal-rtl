@@ -177,3 +177,14 @@ fn scrollback_view_does_not_change_live_content() {
     assert!(host.screen().contents().contains("דחא"));
     assert_eq!(parser.screen().contents(), live);
 }
+
+#[test]
+fn top_scroll_region_keeps_resumed_transcript_above_the_composer() {
+    let mut parser = vt100::Parser::new(5, 30, 100);
+    parser.process(b"RESTORED_0\r\nRESTORED_1\r\nRESTORED_2\r\nRESTORED_3\r\nDRAFT");
+    parser.process(b"\x1b[1;4r\x1b[4;1H\nRESTORED_4\x1b[r");
+    assert_eq!(parser.screen().rows(0, 30).nth(4).unwrap(), "DRAFT");
+    parser.screen_mut().set_scrollback(100);
+    assert_eq!(parser.screen().scrollback(), 1);
+    assert_eq!(parser.screen().rows(0, 30).next().unwrap(), "RESTORED_0");
+}

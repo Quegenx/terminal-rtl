@@ -13,6 +13,7 @@ use crossterm::{
     event::{
         self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
         EnableFocusChange, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+        MouseEventKind,
     },
     execute,
     style::ResetColor,
@@ -27,18 +28,25 @@ use terminal_rtl::{
 
 use crate::Args;
 
-struct TerminalGuard;
+struct TerminalGuard {
+    inline: bool,
+}
 
 impl TerminalGuard {
-    fn enter() -> Result<Self> {
+    fn enter(inline: bool) -> Result<Self> {
         terminal::enable_raw_mode()?;
-        let guard = Self;
-        execute!(
-            io::stdout(),
-            EnterAlternateScreen,
-            EnableBracketedPaste,
-            EnableFocusChange
-        )?;
+        let guard = Self { inline };
+        let mut out = io::stdout();
+        if inline {
+            // Start a fresh viewport without erasing the shell's earlier history.
+            execute!(out, DisableMouseCapture)?;
+            for _ in 0..terminal::size()?.1 {
+                out.write_all(b"\r\n")?;
+            }
+        } else {
+            execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
+        }
+        execute!(out, EnableBracketedPaste, EnableFocusChange)?;
         // Disable host wrapping: our logical screen already implements wrapping.
         io::stdout().write_all(b"\x1b[?7l\x1b[0m\x1b[2J\x1b[H")?;
         io::stdout().flush()?;
@@ -56,9 +64,16 @@ impl Drop for TerminalGuard {
             DisableBracketedPaste,
             DisableFocusChange,
             ResetColor,
-            Show,
-            LeaveAlternateScreen
+            Show
         );
+        if self.inline {
+            if let Ok((_, rows)) = terminal::size() {
+                let _ = write!(out, "\x1b[{};1H\r\n", rows);
+            }
+        } else {
+            let _ = execute!(out, LeaveAlternateScreen);
+        }
+        let _ = out.flush();
         let _ = terminal::disable_raw_mode();
     }
 }
@@ -222,7 +237,7 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
         }
     });
 
-    let guard = TerminalGuard::enter()?;
+    let guard = TerminalGuard::enter(args.inline)?;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
         || -> Result<(u32, Vec<u8>)> {
             let mut parser = vt100::Parser::new_with_callbacks(
@@ -237,8 +252,9 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
             renderer.set_attribution(args.attribution && rows > 1);
             let mut enabled = !args.no_bidi;
             let mut prefix = false;
-            let mut mouse_capture = false;
             let mut scrollback = 0usize;
+            let mut mirrored_history = 0u64;
+            let mut mouse_capture = !args.inline;
             let mut dirty = true;
             let mut eof = false;
             let mut exit = None;
@@ -309,6 +325,25 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                     && (exit.is_some()
                         || (sync_ready && last_render.elapsed() >= Duration::from_millis(16)))
                 {
+                    if std::mem::take(&mut parser.callbacks_mut().clear_scrollback) && args.inline {
+                        out.write_all(b"\x1b[3J")?;
+                    }
+                    if args.inline {
+                        let total = parser.screen().scrollback_total();
+                        if total < mirrored_history {
+                            mirrored_history = 0;
+                        }
+                        let history: Vec<_> =
+                            parser.screen().history_since(mirrored_history).collect();
+                        renderer.append_history(
+                            &history,
+                            parser.screen().size().1,
+                            enabled,
+                            args.direction,
+                            &mut out,
+                        )?;
+                        mirrored_history = total;
+                    }
                     // Never leave the live parser in scrollback while processing bytes.
                     if scrollback > 0 && !parser.screen().alternate_screen() {
                         let mut view = parser.screen().clone();
@@ -322,9 +357,9 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                     last_render = Instant::now();
                     dirty = false;
                 }
-                let wants_mouse = parser.screen().mouse_protocol_mode()
-                    != vt100::MouseProtocolMode::None
-                    && scrollback == 0;
+                let wants_mouse = !args.inline
+                    || (scrollback == 0
+                        && parser.screen().mouse_protocol_mode() != vt100::MouseProtocolMode::None);
                 if wants_mouse != mouse_capture {
                     if wants_mouse {
                         execute!(out, EnableMouseCapture)?;
@@ -424,6 +459,28 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
                     Event::FocusGained if parser.callbacks().focus_events => b"\x1b[I".to_vec(),
                     Event::FocusLost if parser.callbacks().focus_events => b"\x1b[O".to_vec(),
                     Event::Mouse(mouse)
+                        if matches!(
+                            mouse.kind,
+                            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+                        ) && (scrollback > 0
+                            || parser.screen().mouse_protocol_mode()
+                                == vt100::MouseProtocolMode::None) =>
+                    {
+                        // Keep wheel reports out of the prompt's Up/Down history handler.
+                        // Apps with native mouse scrolling retain control while live.
+                        if !parser.screen().alternate_screen() {
+                            scrollback = if mouse.kind == MouseEventKind::ScrollUp {
+                                scrollback
+                                    .saturating_add(3)
+                                    .min(usize::from(args.scrollback))
+                            } else {
+                                scrollback.saturating_sub(3)
+                            };
+                            dirty = true;
+                        }
+                        continue;
+                    }
+                    Event::Mouse(mouse)
                         if scrollback == 0
                             && mouse.column >= margin
                             && mouse.row < parser.screen().size().0 =>
@@ -450,7 +507,7 @@ pub fn run(args: &Args, mut recording: Option<File>) -> Result<u32> {
         Ok(result) => result?,
         Err(panic) => std::panic::resume_unwind(panic),
     };
-    if !args.no_replay {
+    if !args.no_replay && !args.inline {
         io::stdout().write_all(&snapshot)?;
         io::stdout().flush()?;
     }

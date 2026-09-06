@@ -166,6 +166,7 @@ There is no reliable way to automatically detect whether Hebrew was pre-reversed
 | Ctrl+] then `r` | Toggle Hebrew correction; the agent keeps running |
 | Ctrl+] then `q` | Terminate the wrapped command and exit |
 | Ctrl+] twice | Send a literal Ctrl+] to the child |
+| Mouse wheel / trackpad | Scroll retained conversation history; apps with native mouse support handle their own scrolling |
 | Shift+PageUp / Shift+PageDown | Browse retained normal-screen scrollback |
 | Any normal typing key | Return from scrollback to live input |
 | Ctrl+C | Send Ctrl+C to the child as usual |
@@ -173,12 +174,18 @@ There is no reliable way to automatically detect whether Hebrew was pre-reversed
 Some VS Code keybindings intercept these keys. If so, assign a terminal
 `sendSequence` binding for `\u001d` or the relevant key in VS Code.
 
-The wrapper uses the terminal's alternate screen while running, as an interactive
-terminal program does. It does not open a new window or replace VS Code's terminal.
-On exit it restores the original terminal and prints the retained normal-screen
-history and final visible screen into the host's scrollback (without colours).
-Use `--no-replay` to omit that printout. While running, browse history through
-the wrapper's scrollback. Child alternate screens do not add scrollback history.
+The native launchers use `--inline`: finalized output is mirrored into the host
+terminal's normal scrollback as it arrives, including resumed conversation
+history. Use the terminal's mouse wheel, scrollbar, and ordinary drag-to-select
+and copy commands. Codex does not require mouse capture in this mode. Agents
+that request mouse events (such as Grok's full-screen UI) retain their native
+mouse handling; hold Shift to select text through the host in those modes.
+
+Direct `rtl` invocations without `--inline` still use an alternate screen with
+wrapper-managed scrollback and optional output replay on exit (`--no-replay`
+disables replay). Child alternate screens do not produce retained history.
+The pinned credit remains on the live viewport; it scrolls out of view when
+browsing older output through the host's history.
 
 `--record PATH` optionally writes the child's **original raw PTY output**, including
 ANSI sequences, to a new file. No recording is made by default, existing files
@@ -188,7 +195,7 @@ The file may include conversation contents. It is not a timing-aware recording.
 ## What is implemented
 
 - Unix PTY and native Windows ConPTY launch, input, resize, exit status, cleanup.
-- Stateful ANSI parsing through `vt100` (which uses `vte`), including fragmented
+- Stateful ANSI parsing through a patched `vt100` (which uses `vte`), including fragmented
   UTF-8, cursor movement, erase, scrolling, standard colours, and alternate screens.
 - Unicode bidi reordering, bracket mirroring, combining-mark attachment, and
   wide-cell preservation. English-only text is not reordered.
@@ -282,6 +289,10 @@ For local packing, place release binaries at `native/darwin-arm64/rtl` and
 `bun pm pack --destination dist`. Packing fails if a required binary is missing.
 There are no install scripts and no downloads at launch time.
 
-Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.1.tgz`.
+Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.3.tgz`.
 Registry publication is separate from preparing the package. Homebrew is not
 configured in this release.
+
+The small local `vendor/vt100` patch preserves top-anchored scrolling regions
+used by Codex resume and exposes incremental history for the native scrollback
+mirror. Its upstream license and patch notes are included in that directory.

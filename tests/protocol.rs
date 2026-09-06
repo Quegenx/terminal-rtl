@@ -112,3 +112,20 @@ fn escape_sequences_never_leak_as_visible_text() {
         b"\x1b]11;rgb:1111/1111/1111\x1b\\"
     );
 }
+
+#[test]
+fn history_reset_clears_saved_rows_without_erasing_the_draft_or_repeating_rows() {
+    let mut parser = vt100::Parser::new_with_callbacks(3, 30, 2, Protocol::default());
+    parser.process(b"OLD_0\r\nOLD_1\r\nOLD_2\r\nOLD_3\r\nDRAFT");
+    let total = parser.screen().scrollback_total();
+    assert_eq!(total, 2);
+    assert_eq!(parser.screen().history_since(0).count(), 2);
+    assert_eq!(parser.screen().history_since(total).count(), 0);
+    let visible = parser.screen().contents();
+    parser.process(b"\x1b[3J");
+    assert!(parser.callbacks().clear_scrollback);
+    assert_eq!(parser.screen().history_since(0).count(), 0);
+    assert_eq!(parser.screen().contents(), visible);
+    parser.process(b"\r\nNEXT");
+    assert_eq!(parser.screen().history_since(total).count(), 1);
+}

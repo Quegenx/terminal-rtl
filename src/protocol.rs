@@ -3,6 +3,7 @@
 pub struct Protocol {
     pub replies: Vec<u8>,
     pub bell: bool,
+    pub clear_scrollback: bool,
     pub focus_events: bool,
     pub synchronized_output: bool,
 }
@@ -28,6 +29,10 @@ impl vt100::Callbacks for Protocol {
     ) {
         let first = params.first().and_then(|p| p.first()).copied().unwrap_or(0);
         match (i1, i2, c, first) {
+            (None, None, 'J', 3) => {
+                screen.clear_scrollback();
+                self.clear_scrollback = true;
+            }
             (None, None, 'n', 5) => self.replies.extend_from_slice(b"\x1b[0n"),
             (None | Some(b'?'), None, 'n', 6) => {
                 let (row, col) = screen.cursor_position();

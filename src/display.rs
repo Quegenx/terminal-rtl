@@ -291,6 +291,66 @@ impl Renderer {
             .unwrap_or(col)
     }
 
+    fn write_row(
+        &self,
+        visual: &VisualRow,
+        label: Option<&str>,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
+        if self.margin() > 0 {
+            let color = if label == Some("you:") { 6 } else { 5 };
+            write!(out, "\x1b[1;38;5;{color}m{:<8}\x1b[0m", label.unwrap_or(""))?;
+        }
+        let mut style = Style::default();
+        let used = visual
+            .glyphs
+            .iter()
+            .rposition(|g| g.text != " " || g.style != Style::default())
+            .map_or(0, |i| i + 1);
+        for glyph in &visual.glyphs[..used] {
+            if glyph.style != style {
+                glyph.style.write(out)?;
+                style = glyph.style.clone();
+            }
+            out.write_all(glyph.text.as_bytes())?;
+        }
+        if used < visual.glyphs.len() {
+            out.write_all(b"\x1b[0m\x1b[K")?;
+        }
+        Ok(())
+    }
+
+    /// Push finalized transcript rows into the host's normal scrollback, then
+    /// invalidate the live frame so its cursor, composer and footer are restored.
+    pub fn append_history(
+        &mut self,
+        rows: &[Vec<vt100::Cell>],
+        width: u16,
+        enabled: bool,
+        direction: Direction,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let formats = if self.pretty {
+            crate::pretty::detect(rows, None)
+        } else {
+            vec![crate::pretty::RowFormat::default(); rows.len()]
+        };
+        let labels = crate::pretty::speaker_labels(rows, self.agent_label.as_deref());
+        out.write_all(b"\x1b[?25l\x1b[r")?;
+        for (index, cells) in rows.iter().enumerate() {
+            let cells = &cells[..cells.len().min(usize::from(width))];
+            let visual = formatted_row(cells, enabled, direction, &formats[index]);
+            out.write_all(b"\x1b[1;1H\x1b[0m")?;
+            self.write_row(&visual, labels[index].as_deref(), out)?;
+            out.write_all(b"\x1b[0m\x1b[K\x1b[1S")?;
+        }
+        self.invalidate();
+        Ok(())
+    }
+
     /// Emit changed rows only. Host autowrap is disabled by the session guard:
     /// writing the bottom-right cell must never scroll the host's screen.
     pub fn render(
@@ -338,34 +398,7 @@ impl Renderer {
                 || self.labels.get(index) != Some(&labels[index])
             {
                 write!(updates, "\x1b[{};1H\x1b[0m", row + 1)?;
-                if self.margin() > 0 {
-                    let color = if labels[index].as_deref() == Some("you:") {
-                        6
-                    } else {
-                        5
-                    };
-                    write!(
-                        updates,
-                        "\x1b[1;38;5;{color}m{:<8}\x1b[0m",
-                        labels[index].as_deref().unwrap_or("")
-                    )?;
-                }
-                let mut style = Style::default();
-                let used = visual
-                    .glyphs
-                    .iter()
-                    .rposition(|g| g.text != " " || g.style != Style::default())
-                    .map_or(0, |i| i + 1);
-                for glyph in &visual.glyphs[..used] {
-                    if glyph.style != style {
-                        glyph.style.write(&mut updates)?;
-                        style = glyph.style.clone();
-                    }
-                    updates.write_all(glyph.text.as_bytes())?;
-                }
-                if used < visual.glyphs.len() {
-                    updates.write_all(b"\x1b[0m\x1b[K")?;
-                }
+                self.write_row(&visual, labels[index].as_deref(), &mut updates)?;
             }
             if index == self.source.len() {
                 self.source.push(cells.clone());

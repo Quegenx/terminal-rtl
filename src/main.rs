@@ -16,7 +16,7 @@ use terminal_rtl::display::Direction;
     name = "rtl",
     version,
     about = "Run a command with Hebrew display correction in your existing terminal.",
-    after_help = "Examples:\n  rtl codex\n  rtl --demo\n  rtl powershell -NoLogo\n  rtl -- zsh\n\nDuring a session: Ctrl+] then r toggles correction; Ctrl+] then q exits.\nShift+PageUp / Shift+PageDown browse scrollback. Ctrl+] twice sends Ctrl+]."
+    after_help = "Examples:\n  rtl codex\n  rtl --demo\n  rtl powershell -NoLogo\n  rtl -- zsh\n\nDuring a session: Ctrl+] then r toggles correction; Ctrl+] then q exits.\nMouse wheel or Shift+PageUp / Shift+PageDown browse scrollback. Ctrl+] twice sends Ctrl+]."
 )]
 struct Args {
     /// Run the built-in Hebrew display and input demo.
@@ -49,6 +49,9 @@ struct Args {
     /// Keep creator attribution visible in a reserved footer row.
     #[arg(long)]
     attribution: bool,
+    /// Use the host terminal's normal scrollback and text selection.
+    #[arg(long)]
+    inline: bool,
     #[arg(long, hide = true)]
     demo_child: bool,
     /// Command and arguments, passed directly without shell evaluation.
