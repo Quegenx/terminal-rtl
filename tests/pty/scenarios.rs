@@ -43,7 +43,7 @@ pub(super) fn run_fixture() {
             out.write_all(b"GEOMETRY_READY").unwrap();
             out.flush().unwrap();
             let mut key = [0];
-            for dimensions in [(4, 2), (1, 1), (70, 13)] {
+            for dimensions in [(4, 2), (if cfg!(windows) { 2 } else { 1 }, 1), (70, 13)] {
                 super::fixture_input::trace_geometry(dimensions, "before input");
                 super::fixture_input::read_fixture_bytes(&mut key).unwrap();
                 super::fixture_input::trace_geometry(dimensions, "received input");

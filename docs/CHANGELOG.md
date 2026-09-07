@@ -2,6 +2,11 @@
 
 ## 0.1.6 — 2026-09-07
 
+- Preserve native Windows key modifiers and bracketed paste across console reads.
+- Restore the original Windows console input mode after exit.
+- Keep the Windows child at least two columns wide and pause drawing in a
+  one-column host to avoid ConPTY stalls with wide characters.
+
 - Group runtime, display, terminal, test, and packaging code by responsibility;
   move contributor documentation into `docs/` and enforce a 300-line first-party
   file limit in CI. Public library paths and npm executable names remain stable.

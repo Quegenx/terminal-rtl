@@ -103,7 +103,11 @@ fn real_pty_minimum_geometry_browsing_and_replay_options() {
             thread::sleep(Duration::from_millis(220));
             harness.send(b"x");
             harness.until_geometry(
-                if cols >= 10 { cols - 8 } else { cols },
+                if cols >= 10 {
+                    cols - 8
+                } else {
+                    cols.max(if cfg!(windows) { 2 } else { 1 })
+                },
                 if rows > 1 { rows - 1 } else { rows },
             );
         }

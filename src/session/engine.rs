@@ -43,7 +43,10 @@ impl TerminalSession<'_> {
         } = self;
         let initial = child_geometry(args, current_size.0, current_size.1).0;
         let snapshot = |screen: &vt100::Screen, enabled| {
-            if args.no_replay || args.inline {
+            if args.no_replay
+                || args.inline
+                || (cfg!(windows) && terminal::size().is_ok_and(|(cols, _)| cols < 2))
+            {
                 Vec::new()
             } else {
                 terminal_rtl::display::replay(screen, enabled, args.direction, args.layout)
@@ -87,7 +90,7 @@ impl TerminalSession<'_> {
             }
             // A resize signal/event can be coalesced or missed by a host. The
             // occasional size query also covers nested PTYs and ConPTY hosts.
-            if last_size_check.elapsed() >= Duration::from_millis(200) {
+            if cfg!(windows) || last_size_check.elapsed() >= Duration::from_millis(200) {
                 last_size_check = Instant::now();
                 if let Ok((cols, rows)) = terminal::size()
                     && (cols, rows) != current_size
@@ -158,6 +161,7 @@ impl TerminalSession<'_> {
             }
             let sync_ready = sync_started.is_none_or(|t| t.elapsed() >= Duration::from_millis(250));
             if dirty
+                && (!cfg!(windows) || current_size.0 >= 2)
                 && (exit.is_some()
                     || (sync_ready && last_render.elapsed() >= Duration::from_millis(16)))
             {

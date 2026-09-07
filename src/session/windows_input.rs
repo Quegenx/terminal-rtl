@@ -80,7 +80,9 @@ impl HostInputReader {
                 }
             }
         }
-        if self.paste.is_none() && self.last_key.elapsed() >= Duration::from_millis(100) {
+        // Only a lone Escape is ambiguous with an Escape key press. A partial
+        // CSI can span console reads and must survive arbitrary scheduling delays.
+        if self.opener == [27] && self.last_key.elapsed() >= Duration::from_millis(100) {
             self.flush_opener();
         }
         let event = self.ready.pop_front();

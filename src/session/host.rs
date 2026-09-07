@@ -98,7 +98,9 @@ impl Drop for TerminalGuard {
 fn size(cols: u16, rows: u16) -> PtySize {
     PtySize {
         rows: rows.max(1),
-        cols: cols.max(1),
+        // Older ConPTY versions can stall reflow/rendering a wide glyph at
+        // one column. Keep the native child wide enough to make progress.
+        cols: cols.max(if cfg!(windows) { 2 } else { 1 }),
         pixel_width: 0,
         pixel_height: 0,
     }
