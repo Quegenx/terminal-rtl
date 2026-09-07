@@ -16,6 +16,8 @@
 - Restore terminal modes after catchable Unix termination; add Windows console
   cleanup and closing-pipe handling pending native qualification.
 - Skip extensionless npm shell shims on Windows and align PATHEXT fallbacks.
+- Fix Windows inline startup when mouse capture has never been enabled;
+  validate ConPTY screen updates and VT-input fixtures using native CI.
 - Add `--layout prose`, npm `--version`, and accurate timestamp-label boundaries.
 - Read history viewports without cloning the full retained screen.
 - Add geometry/lifecycle/paste/recording/protocol, independent host, launcher,

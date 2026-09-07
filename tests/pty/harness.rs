@@ -157,7 +157,11 @@ impl PtyHarness {
     pub(super) fn until(&mut self, needle: &str) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
-            if String::from_utf8_lossy(&self.output).contains(needle) {
+            // ConPTY can repaint only a changed suffix instead of re-emitting a
+            // contiguous string. Check its reconstructed screen as well as history.
+            if String::from_utf8_lossy(&self.output).contains(needle)
+                || self.host.screen().contents().contains(needle)
+            {
                 return;
             }
             if let Ok(bytes) = self.receive.recv_timeout(Duration::from_millis(20)) {

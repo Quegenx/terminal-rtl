@@ -16,7 +16,14 @@ fn retained_history_is_replayed_after_exit() {
 fn real_pty_wheel_browses_history_without_changing_draft_and_preserves_native_mouse() {
     let mut harness = PtyHarness::new("wheel");
     harness.until("SCROLL_READY draft");
-    assert!(String::from_utf8_lossy(&harness.output).contains("\x1b[?1006h"));
+    assert_eq!(
+        harness.host.screen().mouse_protocol_encoding(),
+        vt100::MouseProtocolEncoding::Sgr
+    );
+    assert_ne!(
+        harness.host.screen().mouse_protocol_mode(),
+        vt100::MouseProtocolMode::None
+    );
     harness.output.clear();
     harness.send(b"\x1b[<64;4;5M".repeat(10).as_slice());
     harness.until("WHEEL_HISTORY_010");

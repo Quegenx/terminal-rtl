@@ -13,8 +13,16 @@ fn real_pty_stream_exit_code_and_terminal_cleanup() {
     assert!(output.contains("!םלוע םולש"), "{output:?}");
     assert!(output.contains("STREAM_OK"));
     assert!(output.contains("\x1b[?1049l"));
+    // ConPTY consumes wrap mode internally; it need not repeat that CSI outside.
+    #[cfg(unix)]
     assert!(output.contains("\x1b[?7h"));
     assert!(output.contains("\x1b[?2004l"));
+    assert!(!harness.host.screen().alternate_screen());
+    assert!(!harness.host.screen().bracketed_paste());
+    assert_eq!(
+        harness.host.screen().mouse_protocol_mode(),
+        vt100::MouseProtocolMode::None
+    );
 }
 
 #[cfg(unix)]
@@ -82,7 +90,9 @@ fn recordings_preserve_raw_text_and_refuse_overwrite() {
         let mut harness = PtyHarness::with_options("stream", &options);
         assert_eq!(harness.finish(), 17);
         let original = std::fs::read(&path).unwrap();
-        assert!(String::from_utf8_lossy(&original).contains("שלום עולם!"));
+        let mut recorded = vt100::Parser::new(12, 60, 100);
+        recorded.process(&original);
+        assert!(recorded.screen().contents().contains("שלום עולם!"));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

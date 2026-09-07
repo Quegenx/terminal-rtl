@@ -17,7 +17,7 @@ pub(super) fn run_fixture() {
     out.write_all(b"\x1b[2J\x1b[H").unwrap();
     match scenario.as_str() {
         "shutdown" | "shutdown-launcher" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             write!(out, "CHILD_PID_{}_READY", std::process::id()).unwrap();
             out.flush().unwrap();
             let mut key = [0];
@@ -25,7 +25,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "paste-boundary" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all(b"\x1b[?2004hPASTE_BOUNDARY_READY").unwrap();
             out.flush().unwrap();
             // Host closer ends the paste. Following bytes are ordinary key
@@ -37,7 +37,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "resize-replay" | "resize-no-replay" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             for line in 0..20 {
                 write!(out, "GEOMETRY_{line:03}\r\n").unwrap();
             }
@@ -62,7 +62,7 @@ pub(super) fn run_fixture() {
         }
         "interactive-launcher" => {
             assert_eq!(crossterm::terminal::size().unwrap(), (52, 11));
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all(b"LAUNCHER_READY").unwrap();
             out.flush().unwrap();
             let mut key = [0];
@@ -71,7 +71,7 @@ pub(super) fn run_fixture() {
             std::process::exit(9);
         }
         "inline-burst" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             for line in 0..100 {
                 write!(out, "BURST_{line:03}\r\n").unwrap();
             }
@@ -82,7 +82,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "shift-enter" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all(b"SHIFT_ENTER_READY").unwrap();
             out.flush().unwrap();
             let mut shifted = [0; 7];
@@ -96,7 +96,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "inline-history" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             // Codex resume scrolls a top region while keeping its composer fixed.
             out.write_all(b"\x1b[1;8r\x1b[1;1H").unwrap();
             out.write_all(b"\x1b]8;id=resumed;https://example.com/complete/destination\x1b\\")
@@ -113,7 +113,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "wheel" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             for line in 0..50 {
                 write!(out, "WHEEL_HISTORY_{line:03}\r\n").unwrap();
             }
@@ -133,7 +133,7 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         "delete" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all(b"DELETE_READY").unwrap();
             out.flush().unwrap();
             let mut bytes = [0; 5];
@@ -173,7 +173,7 @@ pub(super) fn run_fixture() {
                 crossterm::terminal::size().unwrap(),
                 (expected_cols - 10, expected_rows - 2)
             );
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all("שלום\x1b[6n".as_bytes()).unwrap();
             out.flush().unwrap();
             let mut query = [0; 6];
@@ -209,7 +209,7 @@ pub(super) fn run_fixture() {
             std::process::exit(7);
         }
         "toggle" => {
-            crossterm::terminal::enable_raw_mode().unwrap();
+            enable_fixture_raw_mode();
             out.write_all("שלום\r\nTOGGLE_READY".as_bytes()).unwrap();
             out.flush().unwrap();
             let mut byte = [0];
@@ -223,5 +223,26 @@ pub(super) fn run_fixture() {
             std::process::exit(0);
         }
         _ => panic!("unknown fixture"),
+    }
+}
+
+fn enable_fixture_raw_mode() {
+    crossterm::terminal::enable_raw_mode().unwrap();
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Console::{
+            ENABLE_VIRTUAL_TERMINAL_INPUT, GetConsoleMode, GetStdHandle, STD_INPUT_HANDLE,
+            SetConsoleMode,
+        };
+        // These fixtures read VT bytes, unlike applications using ReadConsoleInput.
+        unsafe {
+            let handle = GetStdHandle(STD_INPUT_HANDLE);
+            let mut mode = 0;
+            assert_ne!(GetConsoleMode(handle, &mut mode), 0);
+            assert_ne!(
+                SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_INPUT),
+                0
+            );
+        }
     }
 }

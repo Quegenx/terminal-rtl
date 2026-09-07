@@ -6,16 +6,13 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture},
-    execute, terminal,
-};
+use crossterm::{event, terminal};
 use portable_pty::MasterPty;
 use terminal_rtl::{display::Renderer, protocol::Protocol};
 
 use super::{
     ChildGuard,
-    host::{child_geometry, configure_renderer, resize},
+    host::{child_geometry, configure_renderer, resize, set_mouse_capture},
     interaction::{InputAction, SessionInput},
     output::ChildOutput,
     shutdown::Shutdown,
@@ -183,11 +180,7 @@ impl TerminalSession<'_> {
                 || (input.scrollback == 0
                     && parser.screen().mouse_protocol_mode() != vt100::MouseProtocolMode::None);
             if wants_mouse != mouse_capture {
-                if wants_mouse {
-                    execute!(out, EnableMouseCapture)?;
-                } else {
-                    execute!(out, DisableMouseCapture)?;
-                }
+                set_mouse_capture(&mut out, wants_mouse)?;
                 mouse_capture = wants_mouse;
             }
             if exit.is_none()

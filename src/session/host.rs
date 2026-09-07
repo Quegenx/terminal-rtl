@@ -3,10 +3,7 @@ use std::io::{self, Write};
 use anyhow::Result;
 use crossterm::{
     cursor::Show,
-    event::{
-        DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
-        EnableFocusChange, EnableMouseCapture,
-    },
+    event::{DisableBracketedPaste, DisableFocusChange, EnableBracketedPaste, EnableFocusChange},
     execute,
     style::ResetColor,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -31,12 +28,13 @@ impl TerminalGuard {
         let mut out = io::stdout();
         if inline {
             // Start a fresh viewport without erasing the shell's earlier history.
-            execute!(out, DisableMouseCapture)?;
+            set_mouse_capture(&mut out, false)?;
             for _ in 0..terminal::size()?.1 {
                 out.write_all(b"\r\n")?;
             }
         } else {
-            execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
+            execute!(out, EnterAlternateScreen)?;
+            set_mouse_capture(&mut out, true)?;
         }
         execute!(out, EnableBracketedPaste, EnableFocusChange)?;
         // Ask capable hosts to distinguish Shift+Enter from Enter. Sending ANSI
@@ -57,9 +55,9 @@ impl Drop for TerminalGuard {
             let _ = out.write_all(b"\x1b[<1u");
         }
         let _ = out.write_all(b"\x1b]8;;\x1b\\\x1b[?7h");
+        let _ = set_mouse_capture(&mut out, false);
         let _ = execute!(
             out,
-            DisableMouseCapture,
             DisableBracketedPaste,
             DisableFocusChange,
             ResetColor,
@@ -121,4 +119,44 @@ pub(super) fn resize(
     configure_renderer(renderer, args, cols, rows);
     renderer.invalidate();
     Ok(())
+}
+
+// Crossterm's Windows DisableMouseCapture requires an earlier enable call and
+// otherwise fails with "Initial console modes not set". Inline startup must be
+// able to turn capture off directly, preserving unrelated console mode bits.
+pub(super) fn set_mouse_capture(out: &mut impl Write, enabled: bool) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Console::{
+            ENABLE_EXTENDED_FLAGS, ENABLE_MOUSE_INPUT, ENABLE_QUICK_EDIT_MODE, ENABLE_WINDOW_INPUT,
+            GetConsoleMode, GetStdHandle, STD_INPUT_HANDLE, SetConsoleMode,
+        };
+        let _ = out;
+        // SAFETY: the standard input handle is process-owned; mode points to a u32.
+        unsafe {
+            let handle = GetStdHandle(STD_INPUT_HANDLE);
+            let mut mode = 0;
+            if GetConsoleMode(handle, &mut mode) == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let next = if enabled {
+                (mode | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT | ENABLE_EXTENDED_FLAGS)
+                    & !ENABLE_QUICK_EDIT_MODE
+            } else {
+                mode & !ENABLE_MOUSE_INPUT
+            };
+            if SetConsoleMode(handle, next) == 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        if enabled {
+            execute!(out, crossterm::event::EnableMouseCapture)
+        } else {
+            execute!(out, crossterm::event::DisableMouseCapture)
+        }
+    }
 }
