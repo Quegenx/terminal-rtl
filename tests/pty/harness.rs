@@ -33,6 +33,7 @@ impl Drop for PtySlot {
 
 pub(super) struct PtyHarness {
     _slot: PtySlot,
+    geometry_trace: Option<std::path::PathBuf>,
     pub(super) master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     pub(super) child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -89,6 +90,9 @@ impl PtyHarness {
         } else {
             CommandBuilder::new(env!("CARGO_BIN_EXE_rtl"))
         };
+        let geometry_trace = scenario.starts_with("resize-").then(|| {
+            std::env::temp_dir().join(format!("rtl-geometry-{}-{scenario}", std::process::id()))
+        });
         let cwd = std::env::current_dir().unwrap();
         command.cwd(&cwd);
         command.env("RTL_TEST_EXPECTED_CWD", cwd);
@@ -108,11 +112,7 @@ impl PtyHarness {
             command.arg("--no-replay");
         }
         if scenario.starts_with("resize-") {
-            command.env(
-                "RTL_TEST_GEOMETRY_TRACE",
-                std::env::temp_dir()
-                    .join(format!("rtl-geometry-{}-{scenario}", std::process::id())),
-            );
+            command.env("RTL_TEST_GEOMETRY_TRACE", geometry_trace.as_ref().unwrap());
             command.args(["--agent-label", "codex", "--attribution"]);
         }
         if !scenario.ends_with("-launcher") {
@@ -149,6 +149,7 @@ impl PtyHarness {
         });
         Self {
             _slot: slot,
+            geometry_trace,
             master: pair.master,
             writer,
             child,
@@ -189,8 +190,32 @@ impl PtyHarness {
             }
         }
         panic!(
-            "did not receive {needle:?}: {:?}",
+            "did not receive {needle:?}; screen {:?}; output {:?}",
+            self.host.screen().contents(),
             String::from_utf8_lossy(&self.output)
+        );
+    }
+
+    // A one-cell viewport cannot display an acknowledgement. Observe the
+    // fixture's completed geometry check while continuing to drain PTY output.
+    pub(super) fn until_geometry(&mut self, cols: u16, rows: u16) {
+        let path = self.geometry_trace.clone().unwrap();
+        let expected = format!("({cols}, {rows}): after wide output");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if std::fs::read_to_string(&path)
+                .unwrap_or_default()
+                .contains(&expected)
+            {
+                return;
+            }
+            if let Ok(bytes) = self.receive.recv_timeout(Duration::from_millis(20)) {
+                self.accept_output(&bytes);
+            }
+        }
+        panic!(
+            "geometry acknowledgement missing: {}",
+            std::fs::read_to_string(path).unwrap_or_default()
         );
     }
 
@@ -214,14 +239,6 @@ impl PtyHarness {
             }
             thread::sleep(Duration::from_millis(10));
         }
-        for scenario in ["resize-replay", "resize-no-replay"] {
-            let path = std::env::temp_dir()
-                .join(format!("rtl-geometry-{}-{scenario}", std::process::id()));
-            if let Ok(trace) = std::fs::read_to_string(&path) {
-                eprintln!("Geometry progress: {trace}");
-            }
-            let _ = std::fs::remove_file(path);
-        }
         panic!(
             "wrapper failed to exit: {:?}",
             String::from_utf8_lossy(&self.output)
@@ -232,6 +249,9 @@ impl PtyHarness {
 impl Drop for PtyHarness {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        if let Some(path) = &self.geometry_trace {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 

@@ -47,6 +47,10 @@ pub(super) fn run_fixture() {
                 super::fixture_input::trace_geometry(dimensions, "before input");
                 super::fixture_input::read_fixture_bytes(&mut key).unwrap();
                 super::fixture_input::trace_geometry(dimensions, "received input");
+                super::fixture_input::trace_geometry(
+                    crossterm::terminal::size().unwrap(),
+                    "observed size",
+                );
                 let deadline = Instant::now() + Duration::from_secs(3);
                 while crossterm::terminal::size().unwrap() != dimensions
                     && Instant::now() < deadline

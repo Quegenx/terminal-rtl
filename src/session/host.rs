@@ -16,14 +16,20 @@ use crate::Args;
 pub(super) struct TerminalGuard {
     inline: bool,
     keyboard_enhanced: bool,
+    #[cfg(windows)]
+    original_console_mode: u32,
 }
 
 impl TerminalGuard {
     pub(super) fn enter(inline: bool) -> Result<Self> {
+        #[cfg(windows)]
+        let original_console_mode = console_input_mode(None)?;
         terminal::enable_raw_mode()?;
         let mut guard = Self {
             inline,
             keyboard_enhanced: false,
+            #[cfg(windows)]
+            original_console_mode,
         };
         let mut out = io::stdout();
         if inline {
@@ -40,7 +46,10 @@ impl TerminalGuard {
         {
             // Without VT input, ConPTY consumes paste delimiters. Win32 input
             // mode keeps native modifiers intact while VT input is enabled.
-            set_console_vt_input()?;
+            use windows_sys::Win32::System::Console::ENABLE_VIRTUAL_TERMINAL_INPUT;
+            console_input_mode(Some(
+                console_input_mode(None)? | ENABLE_VIRTUAL_TERMINAL_INPUT,
+            ))?;
             out.write_all(b"\x1b[?9001h")?;
         }
         execute!(out, EnableBracketedPaste, EnableFocusChange)?;
@@ -81,6 +90,8 @@ impl Drop for TerminalGuard {
         }
         let _ = out.flush();
         let _ = terminal::disable_raw_mode();
+        #[cfg(windows)]
+        let _ = console_input_mode(Some(self.original_console_mode));
     }
 }
 
@@ -171,17 +182,20 @@ pub(super) fn set_mouse_capture(out: &mut impl Write, enabled: bool) -> io::Resu
 }
 
 #[cfg(windows)]
-fn set_console_vt_input() -> io::Result<()> {
+fn console_input_mode(next: Option<u32>) -> io::Result<u32> {
     use windows_sys::Win32::System::Console::*;
-    // SAFETY: borrow the process input handle and update its current mode.
+    // SAFETY: borrow the process input handle and read or restore its mode.
     unsafe {
         let handle = GetStdHandle(STD_INPUT_HANDLE);
         let mut mode = 0;
-        if GetConsoleMode(handle, &mut mode) == 0
-            || SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_INPUT) == 0
+        if GetConsoleMode(handle, &mut mode) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if let Some(next) = next
+            && SetConsoleMode(handle, next) == 0
         {
             return Err(io::Error::last_os_error());
         }
+        Ok(mode)
     }
-    Ok(())
 }

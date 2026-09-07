@@ -80,5 +80,6 @@ fn actual_paste_parser_respects_host_framing_across_chunks() {
         harness.send(bytes);
         thread::sleep(Duration::from_millis(20));
     }
-    assert_eq!(harness.finish(), 0);
+    let code = harness.finish();
+    assert_eq!(code, 0, "{:?}", String::from_utf8_lossy(&harness.output));
 }

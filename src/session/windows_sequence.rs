@@ -24,6 +24,16 @@ pub(super) fn decode_console_sequence(units: &[u16]) -> ConsoleSequence {
     let Some(final_byte) = body.as_bytes().last().copied() else {
         return fallback();
     };
+    if body == "I" || body == "O" {
+        return ConsoleSequence::Input(HostInput {
+            event: if body == "I" {
+                Event::FocusGained
+            } else {
+                Event::FocusLost
+            },
+            native_key: None,
+        });
+    }
     let Some(parameters) = body.get(..body.len() - 1) else {
         return fallback();
     };

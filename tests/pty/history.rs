@@ -102,7 +102,10 @@ fn real_pty_minimum_geometry_browsing_and_replay_options() {
             harness.send(b"\x1b[5;2~");
             thread::sleep(Duration::from_millis(220));
             harness.send(b"x");
-            thread::sleep(Duration::from_millis(220));
+            harness.until_geometry(
+                if cols >= 10 { cols - 8 } else { cols },
+                if rows > 1 { rows - 1 } else { rows },
+            );
         }
         assert_eq!(harness.finish(), 0);
         let output = String::from_utf8_lossy(&harness.output);
