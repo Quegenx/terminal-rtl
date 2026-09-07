@@ -30,12 +30,16 @@ use crate::Args;
 
 struct TerminalGuard {
     inline: bool,
+    keyboard_enhanced: bool,
 }
 
 impl TerminalGuard {
     fn enter(inline: bool) -> Result<Self> {
         terminal::enable_raw_mode()?;
-        let guard = Self { inline };
+        let mut guard = Self {
+            inline,
+            keyboard_enhanced: false,
+        };
         let mut out = io::stdout();
         if inline {
             // Start a fresh viewport without erasing the shell's earlier history.
@@ -47,8 +51,12 @@ impl TerminalGuard {
             execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
         }
         execute!(out, EnableBracketedPaste, EnableFocusChange)?;
+        // Ask capable hosts to distinguish Shift+Enter from Enter. Sending ANSI
+        // directly also works on ConPTY; crossterm's command rejects Windows.
+        out.write_all(b"\x1b[>1u")?;
+        guard.keyboard_enhanced = true;
         // Disable host wrapping: our logical screen already implements wrapping.
-        io::stdout().write_all(b"\x1b[?7l\x1b[0m\x1b[2J\x1b[H")?;
+        io::stdout().write_all(b"\x1b]8;;\x1b\\\x1b[?7l\x1b[0m\x1b[2J\x1b[H")?;
         io::stdout().flush()?;
         Ok(guard)
     }
@@ -57,7 +65,10 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let mut out = io::stdout();
-        let _ = out.write_all(b"\x1b[?7h");
+        if self.keyboard_enhanced {
+            let _ = out.write_all(b"\x1b[<1u");
+        }
+        let _ = out.write_all(b"\x1b]8;;\x1b\\\x1b[?7h");
         let _ = execute!(
             out,
             DisableMouseCapture,

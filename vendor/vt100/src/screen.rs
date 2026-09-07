@@ -58,6 +58,7 @@ pub struct Screen {
 
     attrs: crate::attrs::Attrs,
     saved_attrs: crate::attrs::Attrs,
+    hyperlink: Option<std::sync::Arc<crate::Hyperlink>>,
 
     modes: u8,
     mouse_protocol_mode: MouseProtocolMode,
@@ -77,6 +78,7 @@ impl Screen {
 
             attrs: crate::attrs::Attrs::default(),
             saved_attrs: crate::attrs::Attrs::default(),
+            hyperlink: None,
 
             modes: 0,
             mouse_protocol_mode: MouseProtocolMode::default(),
@@ -89,6 +91,11 @@ impl Screen {
         self.grid.set_size(crate::grid::Size { rows, cols });
         self.alternate_grid
             .set_size(crate::grid::Size { rows, cols });
+    }
+
+    /// Sets the OSC 8 link used for subsequently painted cells.
+    pub fn set_hyperlink(&mut self, link: Option<std::sync::Arc<crate::Hyperlink>>) {
+        self.hyperlink = link;
     }
 
     /// Returns the current size of the terminal.
@@ -723,6 +730,7 @@ impl Screen {
         let pos = self.grid().pos();
         let size = self.grid().size();
         let attrs = self.attrs;
+        let hyperlink = self.hyperlink.clone();
 
         let width = c.width();
         if width.is_none() && (u32::from(c)) < 256 {
@@ -897,6 +905,7 @@ impl Screen {
                 // that self.grid().pos().col has a valid value.
                 .unwrap();
             cell.set(c, attrs);
+            cell.set_hyperlink(hyperlink.clone());
             self.grid_mut().col_inc(1);
             if width > 1 {
                 let pos = self.grid().pos();
@@ -953,6 +962,7 @@ impl Screen {
                     .unwrap();
                 next_cell.clear(crate::attrs::Attrs::default());
                 next_cell.set_wide_continuation(true);
+                next_cell.set_hyperlink(hyperlink);
                 self.grid_mut().col_inc(1);
             }
         }

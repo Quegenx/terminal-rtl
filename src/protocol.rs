@@ -6,6 +6,7 @@ pub struct Protocol {
     pub clear_scrollback: bool,
     pub focus_events: bool,
     pub synchronized_output: bool,
+    hyperlink_serial: u64,
 }
 
 impl vt100::Callbacks for Protocol {
@@ -80,7 +81,33 @@ impl vt100::Callbacks for Protocol {
     // Give a deterministic dark palette rather than forwarding queries whose
     // replies crossterm cannot transport. Unsupported OSCs are deliberately not
     // written raw into the host renderer.
-    fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
+    fn unhandled_osc(&mut self, screen: &mut vt100::Screen, params: &[&[u8]]) {
+        if params.first() == Some(&b"8".as_slice()) {
+            // vte splits every semicolon, including those inside a destination.
+            // Reassemble only a bounded URI and never forward unvalidated OSCs.
+            screen.set_hyperlink(None);
+            if params.len() < 3 || params.iter().map(|p| p.len() + 1).sum::<usize>() > 9216 {
+                return;
+            }
+            let Ok(uri) = String::from_utf8(params[2..].join(&b';')) else {
+                return;
+            };
+            let Ok(parameters) = std::str::from_utf8(params[1]) else {
+                return;
+            };
+            self.hyperlink_serial = self.hyperlink_serial.wrapping_add(1);
+            let id = if let Some(id) = parameters
+                .split(':')
+                .find_map(|p| p.strip_prefix("id="))
+                .filter(|id| !id.is_empty())
+            {
+                format!("rtl-{}-id-{id}", std::process::id())
+            } else {
+                format!("rtl-{}-auto-{}", std::process::id(), self.hyperlink_serial)
+            };
+            screen.set_hyperlink(vt100::Hyperlink::new(uri, id).map(std::sync::Arc::new));
+            return;
+        }
         if params.get(1) != Some(&b"?".as_slice()) {
             return;
         }

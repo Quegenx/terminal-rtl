@@ -10,6 +10,8 @@ test('resumed history reaches an independent host terminal scrollback', async ()
   const directory = mkdtempSync(join(tmpdir(), 'terminal-rtl-host-'));
   const capture = join(directory, 'synthetic-output');
   const host = new xterm.Terminal({rows: 12, cols: 60, scrollback: 1000, allowProposedApi: true});
+  const links = [];
+  host.parser.registerOscHandler(8, data => { links.push(data); return false; });
   try {
     const result = spawnSync('cargo', ['test', '--locked', '--test', 'pty', 'inline_resume_uses_native_history_and_leaves_selection_to_the_terminal', '--', '--exact'], {
       cwd: new URL('..', import.meta.url),
@@ -30,6 +32,8 @@ test('resumed history reaches an independent host terminal scrollback', async ()
     assert.ok(history.includes('RESUMED_040'), 'later resumed rows must reach host scrollback');
     assert.ok(viewport.includes('INLINE_DRAFT_READY'), 'restore composer');
     assert.ok(viewport.includes('Powered by: Gal Havkin'), 'restore footer');
+    assert.ok(links.some(link => link.endsWith(';https://example.com/complete/destination')), 'preserve complete hyperlink destinations');
+    assert.equal(links.at(-1), ';', 'close link before the composer and footer');
   } finally {
     host.dispose();
     rmSync(directory, {recursive: true, force: true});

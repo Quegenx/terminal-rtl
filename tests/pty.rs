@@ -124,14 +124,30 @@ fn fixture() {
     let mut input = std::io::stdin();
     out.write_all(b"\x1b[2J\x1b[H").unwrap();
     match scenario.as_str() {
+        "shift-enter" => {
+            crossterm::terminal::enable_raw_mode().unwrap();
+            out.write_all(b"SHIFT_ENTER_READY").unwrap();
+            out.flush().unwrap();
+            let mut shifted = [0; 7];
+            input.read_exact(&mut shifted).unwrap();
+            assert_eq!(&shifted, b"\x1b[13;2u", "Shift+Enter must not submit");
+            out.write_all(b"\r\nNEWLINE_RECEIVED").unwrap();
+            out.flush().unwrap();
+            let mut enter = [0];
+            input.read_exact(&mut enter).unwrap();
+            assert_eq!(enter, [b'\r'], "plain Enter still submits");
+            std::process::exit(0);
+        }
         "inline-history" => {
             crossterm::terminal::enable_raw_mode().unwrap();
             // Codex resume scrolls a top region while keeping its composer fixed.
             out.write_all(b"\x1b[1;8r\x1b[1;1H").unwrap();
+            out.write_all(b"\x1b]8;id=resumed;https://example.com/complete/destination\x1b\\")
+                .unwrap();
             for line in 0..50 {
                 write!(out, "RESUMED_{line:03}\r\n").unwrap();
             }
-            out.write_all(b"\x1b[r\x1b[10;1HINLINE_DRAFT_READY")
+            out.write_all(b"\x1b]8;;\x1b\\\x1b[r\x1b[10;1HINLINE_DRAFT_READY")
                 .unwrap();
             out.flush().unwrap();
             let mut key = [0];
@@ -251,6 +267,18 @@ fn fixture() {
 }
 
 #[test]
+fn real_pty_shift_enter_preserves_modifier_and_restores_host_keyboard() {
+    let mut harness = Harness::new("shift-enter");
+    harness.until("SHIFT_ENTER_READY");
+    assert!(String::from_utf8_lossy(&harness.output).contains("\x1b[>1u"));
+    harness.send(b"\x1b[13;2u");
+    harness.until("NEWLINE_RECEIVED");
+    harness.send(b"\r");
+    assert_eq!(harness.finish(), 0);
+    assert!(String::from_utf8_lossy(&harness.output).contains("\x1b[<1u"));
+}
+
+#[test]
 fn real_pty_backspace_and_forward_delete_remain_distinct() {
     let mut harness = Harness::new("delete");
     harness.until("DELETE_READY");
@@ -353,7 +381,12 @@ fn inline_resume_uses_native_history_and_leaves_selection_to_the_terminal() {
         !output.contains("\x1b[?1006h"),
         "selection must not be captured when the child does not request mouse events"
     );
-    let mut host = vt100::Parser::new(12, 60, 1000);
+    let mut host = vt100::Parser::new_with_callbacks(
+        12,
+        60,
+        1000,
+        terminal_rtl::protocol::Protocol::default(),
+    );
     host.process(b"EARLIER_SHELL_OUTPUT");
     host.process(&harness.output);
     assert!(!host.screen().alternate_screen());
@@ -365,7 +398,14 @@ fn inline_resume_uses_native_history_and_leaves_selection_to_the_terminal() {
     assert!(text.contains("EARLIER_SHELL_OUTPUT"));
     assert!(text.contains("RESUMED_000"));
     assert!(text.contains("RESUMED_040"));
+    let link = history
+        .iter()
+        .flat_map(|row| row.iter())
+        .find_map(|cell| cell.hyperlink())
+        .unwrap();
+    assert_eq!(link.uri(), "https://example.com/complete/destination");
     assert!(host.screen().contents().contains("INLINE_DRAFT_READY"));
+    assert!(host.screen().cell(9, 0).unwrap().hyperlink().is_none());
     assert!(host.screen().contents().contains("Powered by: Gal Havkin"));
     harness.send(b"x");
     assert_eq!(harness.finish(), 0);

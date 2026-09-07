@@ -68,6 +68,7 @@ pub struct Glyph {
     pub text: String,
     pub width: u16,
     pub style: Style,
+    pub hyperlink: Option<std::sync::Arc<vt100::Hyperlink>>,
     pub(crate) logical_col: u16,
 }
 
@@ -124,6 +125,7 @@ fn formatted_row(
             },
             width: if cell.is_wide() { 2 } else { 1 },
             style: Style::from(cell),
+            hyperlink: cell.hyperlink().cloned(),
             logical_col: col as u16,
         })
         .collect();
@@ -302,17 +304,29 @@ impl Renderer {
             write!(out, "\x1b[1;38;5;{color}m{:<8}\x1b[0m", label.unwrap_or(""))?;
         }
         let mut style = Style::default();
+        let mut hyperlink = None;
         let used = visual
             .glyphs
             .iter()
-            .rposition(|g| g.text != " " || g.style != Style::default())
+            .rposition(|g| g.text != " " || g.style != Style::default() || g.hyperlink.is_some())
             .map_or(0, |i| i + 1);
         for glyph in &visual.glyphs[..used] {
+            if glyph.hyperlink.as_deref() != hyperlink {
+                if let Some(link) = glyph.hyperlink.as_deref() {
+                    write!(out, "\x1b]8;id={};{}\x1b\\", link.id(), link.uri())?;
+                } else {
+                    out.write_all(b"\x1b]8;;\x1b\\")?;
+                }
+                hyperlink = glyph.hyperlink.as_deref();
+            }
             if glyph.style != style {
                 glyph.style.write(out)?;
                 style = glyph.style.clone();
             }
             out.write_all(glyph.text.as_bytes())?;
+        }
+        if hyperlink.is_some() {
+            out.write_all(b"\x1b]8;;\x1b\\")?;
         }
         if used < visual.glyphs.len() {
             out.write_all(b"\x1b[0m\x1b[K")?;

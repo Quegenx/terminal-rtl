@@ -38,6 +38,84 @@ fn input_preserves_hebrew_and_control_keys() {
 }
 
 #[test]
+fn modified_enter_is_distinct_from_submit() {
+    assert_eq!(
+        key_bytes(KeyEvent::new(KeyCode::Enter, Mod::NONE), false),
+        b"\r"
+    );
+    assert_eq!(
+        key_bytes(KeyEvent::new(KeyCode::Enter, Mod::SHIFT), false),
+        b"\x1b[13;2u"
+    );
+    assert_eq!(
+        key_bytes(KeyEvent::new(KeyCode::Enter, Mod::ALT), false),
+        b"\x1b\r"
+    );
+    assert_eq!(
+        key_bytes(KeyEvent::new(KeyCode::Enter, Mod::SHIFT | Mod::ALT), false),
+        b"\x1b[13;4u"
+    );
+}
+
+#[test]
+fn links_follow_cells_through_wrap_scroll_erase_and_alternate_screens() {
+    let mut parser = vt100::Parser::new_with_callbacks(2, 8, 10, Protocol::default());
+    parser.process(b"\x1b]8;;https://example.com/full-destination\x07ABCDEFGH1234\x1b]8;;\x07!");
+    let first = parser
+        .screen()
+        .cell(0, 0)
+        .unwrap()
+        .hyperlink()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        parser.screen().cell(1, 0).unwrap().hyperlink(),
+        Some(&first)
+    );
+    assert!(parser.screen().cell(1, 4).unwrap().hyperlink().is_none());
+    parser.process(b"\r\nnext");
+    let saved = parser.screen().history_since(0).next().unwrap();
+    assert_eq!(saved[0].hyperlink(), Some(&first));
+    parser.process(b"\x1b[H\x1b[K");
+    assert!(parser.screen().cell(0, 0).unwrap().hyperlink().is_none());
+    parser.process("\x1b]8;id=wide;file:///tmp/example.txt\x1b\\界\x1b]8;;\x1b\\".as_bytes());
+    assert_eq!(
+        parser.screen().cell(0, 0).unwrap().hyperlink(),
+        parser.screen().cell(0, 1).unwrap().hyperlink()
+    );
+    parser.process(b"\x1b[?1049hALT\x1b[?1049l");
+    assert_eq!(
+        parser
+            .screen()
+            .cell(0, 0)
+            .unwrap()
+            .hyperlink()
+            .unwrap()
+            .uri(),
+        "file:///tmp/example.txt"
+    );
+    parser.screen_mut().set_size(3, 12);
+    assert_eq!(
+        parser
+            .screen()
+            .cell(0, 0)
+            .unwrap()
+            .hyperlink()
+            .unwrap()
+            .uri(),
+        "file:///tmp/example.txt"
+    );
+}
+
+#[test]
+fn invalid_link_metadata_cannot_emit_terminal_controls() {
+    assert!(vt100::Hyperlink::new("https://example.com/\u{009c}".into(), "id".into()).is_none());
+    assert!(vt100::Hyperlink::new("https://example.com/\x1b[2J".into(), "id".into()).is_none());
+    assert!(vt100::Hyperlink::new("https://example.com".into(), "id;other".into()).is_none());
+    assert!(vt100::Hyperlink::new("x".repeat(8193), "id".into()).is_none());
+}
+
+#[test]
 fn paste_uses_the_childs_mode_and_preserves_original_order() {
     assert_eq!(paste_bytes("שלום\nworld", false), "שלום\nworld".as_bytes());
     assert_eq!(

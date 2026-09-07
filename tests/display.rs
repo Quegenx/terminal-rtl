@@ -24,6 +24,42 @@ fn hebrew_and_punctuation_are_in_visual_order() {
 }
 
 #[test]
+fn hyperlink_destinations_survive_rtl_rendering_and_redraw() {
+    use terminal_rtl::protocol::Protocol;
+    let mut parser = vt100::Parser::new_with_callbacks(3, 40, 10, Protocol::default());
+    for byte in
+        "\x1b]8;id=docs;https://example.com/a;b?lang=he\x1b\\שלום\x1b]8;;\x1b\\ plain".as_bytes()
+    {
+        parser.process(&[*byte]);
+    }
+    let mut renderer = Renderer::default();
+    let mut output = Vec::new();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut output)
+        .unwrap();
+    let output = String::from_utf8(output).unwrap();
+    assert!(
+        output.contains(";https://example.com/a;b?lang=he\x1b\\"),
+        "{output:?}"
+    );
+    assert!(
+        output.contains("םולש\x1b]8;;\x1b\\"),
+        "close the link after its visual label: {output:?}"
+    );
+    // A changed destination with identical visible text still needs a repaint.
+    parser.process("\x1b[H\x1b]8;;https://example.org/new\x1b\\שלום\x1b]8;;\x1b\\".as_bytes());
+    let mut changed = Vec::new();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut changed)
+        .unwrap();
+    assert!(
+        String::from_utf8(changed)
+            .unwrap()
+            .contains("https://example.org/new")
+    );
+}
+
+#[test]
 fn english_numbers_paths_and_cli_flags_keep_their_internal_order() {
     let output = text(&row("שלום English 123 src/main.rs --help", 60));
     assert!(

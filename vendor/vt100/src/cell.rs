@@ -1,6 +1,6 @@
 use unicode_width::UnicodeWidthChar as _;
 
-// chosen to make the size of the cell struct 32 bytes
+// Keep upstream's inline text capacity; the local hyperlink adds one shared pointer.
 const CONTENT_BYTES: usize = 22;
 
 const IS_WIDE: u8 = 0b1000_0000;
@@ -13,8 +13,8 @@ pub struct Cell {
     contents: [u8; CONTENT_BYTES],
     len: u8,
     attrs: crate::attrs::Attrs,
+    hyperlink: Option<std::sync::Arc<crate::Hyperlink>>,
 }
-const _: () = assert!(std::mem::size_of::<Cell>() == 32);
 
 impl PartialEq<Self> for Cell {
     fn eq(&self, other: &Self) -> bool {
@@ -22,6 +22,9 @@ impl PartialEq<Self> for Cell {
             return false;
         }
         if self.attrs != other.attrs {
+            return false;
+        }
+        if self.hyperlink != other.hyperlink {
             return false;
         }
         let len = self.len();
@@ -35,6 +38,7 @@ impl Cell {
             contents: Default::default(),
             len: 0,
             attrs: crate::attrs::Attrs::default(),
+            hyperlink: None,
         }
     }
 
@@ -50,6 +54,7 @@ impl Cell {
         // have to look at the first character
         self.set_wide(c.width().unwrap_or(1) > 1);
         self.attrs = a;
+        self.hyperlink = None;
     }
 
     pub(crate) fn append(&mut self, c: char) {
@@ -76,6 +81,18 @@ impl Cell {
     pub(crate) fn clear(&mut self, attrs: crate::attrs::Attrs) {
         self.len = 0;
         self.attrs = attrs;
+        self.hyperlink = None;
+    }
+
+    /// Returns the immutable hyperlink metadata attached to this cell.
+    #[must_use]
+    pub fn hyperlink(&self) -> Option<&std::sync::Arc<crate::Hyperlink>> {
+        self.hyperlink.as_ref()
+    }
+
+    /// Attaches an already validated link without changing text or attributes.
+    pub fn set_hyperlink(&mut self, link: Option<std::sync::Arc<crate::Hyperlink>>) {
+        self.hyperlink = link;
     }
 
     /// Returns the text contents of the cell.

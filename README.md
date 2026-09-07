@@ -170,9 +170,15 @@ There is no reliable way to automatically detect whether Hebrew was pre-reversed
 | Shift+PageUp / Shift+PageDown | Browse retained normal-screen scrollback |
 | Any normal typing key | Return from scrollback to live input |
 | Ctrl+C | Send Ctrl+C to the child as usual |
+| Shift+Enter | Preserve modified Enter; Codex and Grok use it for a new draft line |
 
 Some VS Code keybindings intercept these keys. If so, assign a terminal
 `sendSequence` binding for `\u001d` or the relevant key in VS Code.
+
+The wrapper requests disambiguated keyboard events from capable terminals and
+preserves an explicit Shift+Enter sequence (`\u001b[13;2u`). If your terminal
+sends exactly the same bytes for Enter and Shift+Enter, assign that sequence to
+Shift+Enter in its keybindings; the wrapper cannot distinguish identical input.
 
 The native launchers use `--inline`: finalized output is mirrored into the host
 terminal's normal scrollback as it arrives, including resumed conversation
@@ -180,6 +186,11 @@ history. Use the terminal's mouse wheel, scrollbar, and ordinary drag-to-select
 and copy commands. Codex does not require mouse capture in this mode. Agents
 that request mouse events (such as Grok's full-screen UI) retain their native
 mouse handling; hold Shift to select text through the host in those modes.
+
+OSC 8 hyperlinks keep their original destination as their labels are reordered,
+wrapped, redrawn, and saved in scrollback. Use the host's normal open-link gesture
+(usually Cmd-click on macOS or Ctrl-click on Windows). Plain URLs without OSC 8
+metadata still depend on the host terminal's automatic link detection.
 
 Direct `rtl` invocations without `--inline` still use an alternate screen with
 wrapper-managed scrollback and optional output replay on exit (`--no-replay`
@@ -220,8 +231,7 @@ The file may include conversation contents. It is not a timing-aware recording.
   only by disabling correction; it is not a code/Markdown parser.
 - Advanced emoji clusters inherit the parser's cell-width limitations. Arabic
   shaping is not provided; Hebrew is the primary target.
-- OSC hyperlinks display their text but do not retain link metadata. Images,
-  clipboard OSCs, extended kitty keyboard protocols, and application-requested
+- Images, clipboard OSCs, full kitty keyboard event reporting, and application-requested
   window manipulation are not supported. Colour queries use a fixed dark palette.
 - Forced OS termination cannot always restore terminal state. After a hard kill,
   `reset` on Unix or opening a fresh terminal restores a usable terminal.
@@ -297,7 +307,7 @@ For local packing, place release binaries at `native/darwin-arm64/rtl` and
 `bun pm pack --destination dist`. Packing fails if a required binary is missing.
 There are no install scripts and no downloads at launch time.
 
-Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.4.tgz`.
+Authenticate to npm, then publish the verified tarball with `bun publish ./path/to/terminal-rtl-0.1.5.tgz`.
 Registry publication is separate from preparing the package. Homebrew is not
 configured in this release.
 

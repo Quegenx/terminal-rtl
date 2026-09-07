@@ -27,6 +27,9 @@ pub fn key_bytes(key: KeyEvent, application_cursor: bool) -> Vec<u8> {
                 c.to_string().into_bytes()
             }
         }
+        // CSI u retains Shift even when the host uses an explicit key binding
+        // rather than negotiated keyboard enhancements. Plain Enter stays CR.
+        KeyCode::Enter if shift => return format!("\x1b[13;{modifier}u").into_bytes(),
         KeyCode::Enter => vec![b'\r'],
         KeyCode::Tab if shift => return b"\x1b[Z".to_vec(),
         KeyCode::Tab => vec![b'\t'],
