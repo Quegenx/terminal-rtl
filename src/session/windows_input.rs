@@ -93,6 +93,28 @@ impl HostInputReader {
     }
 
     fn accept_key(&mut self, key: KEY_EVENT_RECORD) {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("RTL_TEST_NATIVE_TRACE").is_some() {
+            use std::io::Write;
+            let path =
+                std::env::temp_dir().join(format!("rtl-native-input-{}.trace", std::process::id()));
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(path)
+                .unwrap();
+            writeln!(
+                file,
+                "{},{},{},{},{},{}",
+                key.wVirtualKeyCode,
+                key.wVirtualScanCode,
+                unsafe { key.uChar.UnicodeChar },
+                key.bKeyDown,
+                key.dwControlKeyState,
+                key.wRepeatCount
+            )
+            .unwrap();
+        }
         // Ignore release events as on the existing crossterm input path, except
         // Alt-code releases, whose UnicodeChar is the actual typed character.
         let alt_code =
