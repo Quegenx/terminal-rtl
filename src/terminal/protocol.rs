@@ -7,9 +7,19 @@ pub struct Protocol {
     pub focus_events: bool,
     pub synchronized_output: bool,
     hyperlink_serial: u64,
+    hyperlink_generation: u64,
 }
 
 impl vt100::Callbacks for Protocol {
+    fn reset(&mut self, _: &mut vt100::Screen) {
+        // Keep serials unique for hyperlinks already delivered to the host.
+        let serial = self.hyperlink_serial;
+        let generation = self.hyperlink_generation.wrapping_add(1);
+        *self = Self::default();
+        self.hyperlink_serial = serial;
+        self.hyperlink_generation = generation;
+    }
+
     fn audible_bell(&mut self, _: &mut vt100::Screen) {
         self.bell = true;
     }
@@ -31,12 +41,13 @@ impl vt100::Callbacks for Protocol {
         let first = params.first().and_then(|p| p.first()).copied().unwrap_or(0);
         match (i1, i2, c, first) {
             (None, None, 'J', 3) => {
+                // Child clears affect retained state, never pre-session host history.
                 screen.clear_scrollback();
                 self.clear_scrollback = true;
             }
             (None, None, 'n', 5) => self.replies.extend_from_slice(b"\x1b[0n"),
             (None | Some(b'?'), None, 'n', 6) => {
-                let (row, col) = screen.cursor_position();
+                let (row, col) = screen.cursor_report_position();
                 let col = col.min(screen.size().1 - 1);
                 let private = if i1.is_some() { "?" } else { "" };
                 self.replies.extend_from_slice(
@@ -83,8 +94,8 @@ impl vt100::Callbacks for Protocol {
     // written raw into the host renderer.
     fn unhandled_osc(&mut self, screen: &mut vt100::Screen, params: &[&[u8]]) {
         if params.first() == Some(&b"8".as_slice()) {
-            // vte splits every semicolon, including those inside a destination.
-            // Reassemble only a bounded URI and never forward unvalidated OSCs.
+            // Patched vte preserves the URI as one parameter; also accept callbacks
+            // with split URI segments, joining them before bounded validation.
             screen.set_hyperlink(None);
             if params.len() < 3 || params.iter().map(|p| p.len() + 1).sum::<usize>() > 9216 {
                 return;
@@ -101,7 +112,11 @@ impl vt100::Callbacks for Protocol {
                 .find_map(|p| p.strip_prefix("id="))
                 .filter(|id| !id.is_empty())
             {
-                format!("rtl-{}-id-{id}", std::process::id())
+                format!(
+                    "rtl-{}-{}-id-{id}",
+                    std::process::id(),
+                    self.hyperlink_generation
+                )
             } else {
                 format!("rtl-{}-auto-{}", std::process::id(), self.hyperlink_serial)
             };

@@ -264,3 +264,25 @@ fn grok_minimal_labels_plain_replies_without_labeling_status_or_input_continuati
     assert_eq!(labels[12].as_deref(), Some("you:"));
     assert_eq!(labels[13], None);
 }
+
+#[test]
+fn timestamp_labels_require_valid_clock_boundaries() {
+    for (clock, valid) in [
+        ("00:00", true),
+        ("23:59", true),
+        ("1:05 PM", true),
+        ("12:59 AM", true),
+        ("24:00", false),
+        ("23:60", false),
+        ("00:30 AM", false),
+        ("23:59 PM", false),
+        ("+1:00", false),
+        ("12:3", false),
+    ] {
+        let mut parser = vt100::Parser::new(1, 60, 0);
+        parser.process(format!("message  {clock}").as_bytes());
+        let labels =
+            terminal_rtl::pretty::speaker_labels(&parser.screen().viewport_rows(), Some("grok"));
+        assert_eq!(labels[0].is_some(), valid, "{clock}");
+    }
+}

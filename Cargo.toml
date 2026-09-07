@@ -1,7 +1,9 @@
 [package]
 name = "terminal-rtl"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
+autotests = false
+rust-version = "1.88"
 description = "Hebrew RTL display correction and lightweight formatting for native terminal AI agents."
 license = "MIT"
 
@@ -11,13 +13,20 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
-crossterm = "0.29"
+# Level-triggered tty polling preserves input arriving alongside SIGWINCH.
+crossterm = { version = "0.29", features = ["use-dev-tty"] }
 portable-pty = "0.9"
 unicode-bidi = "0.3"
 unicode-bidi-mirroring = "0.4"
 vt100 = "0.16.2"
+
+[target.'cfg(windows)'.dependencies]
+base64 = "0.22"
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"
 
 [profile.release]
 lto = "thin"
@@ -25,3 +34,24 @@ strip = true
 
 [patch.crates-io]
 vt100 = { path = "vendor/vt100" }
+vte = { path = "vendor/vte" }
+
+[[test]]
+name = "display"
+path = "tests/display/rendering.rs"
+
+[[test]]
+name = "pretty"
+path = "tests/display/formatting.rs"
+
+[[test]]
+name = "protocol"
+path = "tests/terminal/protocol.rs"
+
+[[test]]
+name = "audit"
+path = "tests/regression/audit.rs"
+
+[[test]]
+name = "pty"
+path = "tests/pty/main.rs"

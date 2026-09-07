@@ -73,6 +73,11 @@ impl Row {
     pub fn resize(&mut self, len: u16, cell: crate::Cell) {
         self.cells.resize(usize::from(len), cell);
         self.wrapped = false;
+        if let Some(last) = self.cells.last_mut() {
+            if last.is_wide() {
+                last.clear(*last.attrs());
+            }
+        }
     }
 
     pub fn wrap(&mut self, wrap: bool) {

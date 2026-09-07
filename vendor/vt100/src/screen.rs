@@ -61,6 +61,8 @@ pub struct Screen {
     hyperlink: Option<std::sync::Arc<crate::Hyperlink>>,
 
     modes: u8,
+    wraparound: bool,
+    reset_generation: u64,
     mouse_protocol_mode: MouseProtocolMode,
     mouse_protocol_encoding: MouseProtocolEncoding,
 }
@@ -70,6 +72,7 @@ impl Screen {
         size: crate::grid::Size,
         scrollback_len: usize,
     ) -> Self {
+        let size = crate::grid::Size { rows: size.rows.max(1), cols: size.cols.max(1) };
         let mut grid = crate::grid::Grid::new(size, scrollback_len);
         grid.allocate_rows();
         Self {
@@ -81,13 +84,61 @@ impl Screen {
             hyperlink: None,
 
             modes: 0,
+            wraparound: true,
+            reset_generation: 0,
             mouse_protocol_mode: MouseProtocolMode::default(),
             mouse_protocol_encoding: MouseProtocolEncoding::default(),
         }
     }
 
+    /// Generation changes on RIS even when the new history count is identical.
+    pub fn reset_generation(&self) -> u64 { self.reset_generation }
+
+    /// Cursor coordinates relative to the scrolling region in origin mode.
+    pub fn cursor_report_position(&self) -> (u16, u16) {
+        let pos = self.grid().report_pos();
+        (pos.row, pos.col)
+    }
+
+    /// Number of retained rows on the active screen.
+    pub fn retained_rows(&self) -> usize { self.grid().retained_rows() }
+
+    /// Visible rows clipped/padded to the viewport; saved history is not reflowed.
+    pub fn viewport_rows(&self) -> Vec<Vec<crate::Cell>> {
+        self.viewport_rows_at(self.scrollback())
+    }
+
+    /// Read a history viewport without cloning all retained rows or mutating
+    /// the live parser's scrollback offset.
+    pub fn viewport_rows_at(&self, offset: usize) -> Vec<Vec<crate::Cell>> {
+        let width = usize::from(self.size().1);
+        self.grid().visible_rows_at(offset).map(|row| {
+            let mut cells: Vec<_> = row.cells().take(width).cloned().collect();
+            cells.resize(width, crate::Cell::new());
+            if let Some(last) = cells.last_mut() {
+                if last.is_wide() { last.clear(*last.attrs()); }
+            }
+            cells
+        }).collect()
+    }
+
+    /// Current live rows at their native width, independently of scrollback view.
+    pub fn live_rows(&self) -> impl Iterator<Item = Vec<crate::Cell>> + '_ {
+        self.grid().drawing_rows().map(|row| row.cells().cloned().collect())
+    }
+
+    pub(crate) fn deliver_history(&mut self, enabled: bool) {
+        // Alternate-screen rows never become normal-screen transcript history.
+        self.grid.deliver_history = enabled;
+    }
+
+    pub(crate) fn take_pending_history(&mut self) -> Vec<Vec<crate::Cell>> {
+        std::mem::take(&mut self.grid.pending_history)
+    }
+
     /// Resizes the terminal.
     pub fn set_size(&mut self, rows: u16, cols: u16) {
+        let (rows, cols) = (rows.max(1), cols.max(1));
         self.grid.set_size(crate::grid::Size { rows, cols });
         self.alternate_grid
             .set_size(crate::grid::Size { rows, cols });
@@ -726,7 +777,7 @@ impl Screen {
 }
 
 impl Screen {
-    pub(crate) fn text(&mut self, c: char) {
+    pub(crate) fn text(&mut self, mut c: char) {
         let pos = self.grid().pos();
         let size = self.grid().size();
         let attrs = self.attrs;
@@ -737,12 +788,17 @@ impl Screen {
             // don't even try to draw control characters
             return;
         }
-        let width = width
+        let mut width: u16 = width
             .unwrap_or(1)
             .try_into()
             // width() can only return 0, 1, or 2
             .unwrap();
 
+        // A wide glyph cannot fit in one column: use a one-cell replacement.
+        if width > size.cols { c = '\u{fffd}'; width = 1; }
+        if !self.wraparound && width > 0 {
+            self.grid_mut().col_set(pos.col.min(size.cols - width));
+        }
         // it doesn't make any sense to wrap if the last column in a row
         // didn't already have contents. don't try to handle the case where a
         // character wraps because there was only one column left in the
@@ -767,7 +823,7 @@ impl Screen {
                 wrap = true;
             }
         }
-        self.grid_mut().col_wrap(width, wrap);
+        if self.wraparound { self.grid_mut().col_wrap(width, wrap); }
         let pos = self.grid().pos();
 
         if width == 0 {
@@ -1023,7 +1079,9 @@ impl Screen {
 
     // ESC c
     pub(crate) fn ris(&mut self) {
+        let generation = self.reset_generation.wrapping_add(1);
         *self = Self::new(self.grid.size(), self.grid.scrollback_len());
+        self.reset_generation = generation;
     }
 
     // csi codes
@@ -1172,6 +1230,7 @@ impl Screen {
             match param {
                 [1] => self.set_mode(MODE_APPLICATION_CURSOR),
                 [6] => self.grid_mut().set_origin_mode(true),
+                [7] => self.wraparound = true,
                 [9] => self.set_mouse_mode(MouseProtocolMode::Press),
                 [25] => self.clear_mode(MODE_HIDE_CURSOR),
                 [47] => self.enter_alternate_grid(),
@@ -1209,6 +1268,7 @@ impl Screen {
             match param {
                 [1] => self.clear_mode(MODE_APPLICATION_CURSOR),
                 [6] => self.grid_mut().set_origin_mode(false),
+                [7] => self.wraparound = false,
                 [9] => self.clear_mouse_mode(MouseProtocolMode::Press),
                 [25] => self.set_mode(MODE_HIDE_CURSOR),
                 [47] => {

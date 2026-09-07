@@ -49,6 +49,24 @@ impl<CB: crate::callbacks::Callbacks> Parser<CB> {
         self.parser.advance(&mut self.screen, bytes);
     }
 
+    /// Deliver scrolled rows synchronously, independently of retention capacity.
+    /// The callback applies backpressure before parsing another byte. Pending
+    /// rows are bounded by one terminal operation (at most one screenful).
+    pub fn process_with_history<E>(
+        &mut self,
+        bytes: &[u8],
+        mut deliver: impl FnMut(&[Vec<crate::Cell>]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for byte in bytes {
+            self.screen.screen.deliver_history(true);
+            self.process(std::slice::from_ref(byte));
+            self.screen.screen.deliver_history(false);
+            let rows = self.screen.screen.take_pending_history();
+            if !rows.is_empty() { deliver(&rows)?; }
+        }
+        Ok(())
+    }
+
     /// Returns a reference to a [`Screen`](crate::Screen) object containing
     /// the terminal state.
     #[must_use]

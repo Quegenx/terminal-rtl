@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 use clap::Parser;
-use terminal_rtl::display::Direction;
+use terminal_rtl::display::{Direction, Layout};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -31,6 +31,9 @@ struct Args {
     /// Base direction for each text field; auto detects Hebrew/English.
     #[arg(long, value_enum, default_value_t = Direction::Auto)]
     direction: Direction,
+    /// Treat repeated spaces as fixed columns (default) or a single prose field.
+    #[arg(long, value_enum, default_value_t = Layout::Columns)]
+    layout: Layout,
     /// Maximum retained scrollback rows (normal child screen only).
     #[arg(long, default_value_t = 10000, value_parser = clap::value_parser!(u16).range(0..=50000))]
     scrollback: u16,
@@ -76,6 +79,11 @@ fn run() -> Result<u32> {
     }
     if args.doctor {
         println!("rtl {}", env!("CARGO_PKG_VERSION"));
+        println!(concat!(
+            "terminal-rtl-version:",
+            env!("CARGO_PKG_VERSION"),
+            ":end"
+        ));
         println!(
             "Platform: {} / {}",
             std::env::consts::OS,
@@ -106,7 +114,7 @@ fn run() -> Result<u32> {
     }
     ensure!(
         io::stdin().is_terminal() && io::stdout().is_terminal(),
-        "an interactive terminal is required; run this in VS Code's terminal panel"
+        "an interactive terminal is required; run this in an interactive terminal"
     );
     ensure!(
         std::env::var_os("RTL_ACTIVE").is_none(),
