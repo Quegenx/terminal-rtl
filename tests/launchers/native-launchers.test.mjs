@@ -41,7 +41,7 @@ test('Windows resolution respects executable types and PATHEXT order', () => {
     assert.equal(resolveExecutable('agent', {...options, pathext:'.EXE;.CMD'}), join(root, 'agent.EXE'));
     assert.equal(resolveExecutable('agent.ps1', options), undefined);
     assert.equal(resolveExecutable('agent.CMD', options), join(root, 'agent.CMD'));
-    const args = readFileSync(new URL('../fixtures/windows-arguments.txt', import.meta.url), 'utf8').trimEnd().split('\n');
+    const args = readFileSync(new URL('../fixtures/windows-arguments.txt', import.meta.url), 'utf8').trimEnd().split(/\r?\n/);
     const command = "C:\\space folder\\O'Brien.cmd";
     const encoded = powershellBatchArguments(command, args).at(-1);
     const script = Buffer.from(encoded, 'base64').toString('utf16le');
@@ -58,7 +58,7 @@ test('Unix self-signaled children retain conventional signal exit status', {skip
   assert.equal(result.status, 143, result.stderr);
 });
 
-test('real npm Windows shims launch through piped JS and interactive Rust paths', {skip:process.platform !== 'win32'}, () => {
+test('real npm Windows shims launch through piped JS and interactive Rust paths', {skip:process.platform !== 'win32', timeout:120000}, () => {
   const root = mkdtempSync(join(tmpdir(), 'rtl-npm-shims-'));
   try {
     const fixture = join(root, 'fixture');
