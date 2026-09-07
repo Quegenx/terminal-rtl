@@ -7,6 +7,9 @@ import assert from 'node:assert/strict';
 import {validateBinary} from './check-package.mjs';
 const repository = fileURLToPath(new URL('../..', import.meta.url));
 const archive = resolve(process.argv[2]);
+// Git's GNU tar interprets a Windows drive prefix as a remote host.
+const tar = process.platform === 'win32'
+  ? join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
 const root = mkdtempSync(join(tmpdir(), 'rtl-extracted-package-'));
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {encoding:'utf8', timeout:120000, ...options});
@@ -14,9 +17,9 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 try {
-  const entries = run('tar', ['-tzf', archive]).trim().split('\n');
+  const entries = run(tar, ['-tzf', archive]).trim().split('\n');
   assert.ok(entries.every(name => name.startsWith('package/') && !name.split('/').includes('..')), 'archive paths stay inside package/');
-  run('tar', ['-xzf', archive, '-C', root]);
+  run(tar, ['-xzf', archive, '-C', root]);
   const pkg = join(root, 'package');
   const {version} = JSON.parse(readFileSync(join(pkg,'package.json'),'utf8'));
   assert.ok(!existsSync(join(pkg,'target')));
