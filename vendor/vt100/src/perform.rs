@@ -70,7 +70,7 @@ impl<CB: crate::callbacks::Callbacks> vte::Perform for WrappedScreen<CB> {
                 b'=' => self.screen.deckpam(),
                 b'>' => self.screen.deckpnm(),
                 b'M' => self.screen.ri(),
-                b'c' => self.screen.ris(),
+                b'c' => { self.screen.ris(); self.callbacks.reset(&mut self.screen); },
                 b'g' => self.callbacks.visual_bell(&mut self.screen),
                 _ => {
                     self.callbacks.unhandled_escape(
@@ -194,6 +194,8 @@ impl<CB: crate::callbacks::Callbacks> vte::Perform for WrappedScreen<CB> {
             }
         }
     }
+
+    fn osc_rejected(&mut self) { self.screen.set_hyperlink(None); }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bel_terminated: bool) {
         match params {

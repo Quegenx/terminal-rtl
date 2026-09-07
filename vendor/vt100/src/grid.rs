@@ -14,6 +14,8 @@ pub struct Grid {
     scrollback_len: usize,
     scrollback_offset: usize,
     scrollback_total: u64,
+    pub pending_history: Vec<Vec<crate::Cell>>,
+    pub deliver_history: bool,
 }
 
 impl Grid {
@@ -31,6 +33,8 @@ impl Grid {
             scrollback_len,
             scrollback_offset: 0,
             scrollback_total: 0,
+            pending_history: Vec::new(),
+            deliver_history: false,
         }
     }
 
@@ -101,6 +105,12 @@ impl Grid {
         }
     }
 
+    pub fn report_pos(&self) -> Pos {
+        let mut pos = self.pos;
+        if self.origin_mode { pos.row = pos.row.saturating_sub(self.scroll_top); }
+        pos
+    }
+
     pub fn pos(&self) -> Pos {
         self.pos
     }
@@ -125,12 +135,19 @@ impl Grid {
         self.origin_mode = self.saved_origin_mode;
     }
 
+    pub fn retained_rows(&self) -> usize { self.scrollback.len() }
+
     pub fn visible_rows(&self) -> impl Iterator<Item = &crate::row::Row> {
+        self.visible_rows_at(self.scrollback_offset)
+    }
+
+    pub fn visible_rows_at(&self, offset: usize) -> impl Iterator<Item = &crate::row::Row> {
+        let offset = offset.min(self.scrollback.len());
         let scrollback_len = self.scrollback.len();
         let rows_len = self.rows.len();
         self.scrollback
             .iter()
-            .skip(scrollback_len - self.scrollback_offset)
+            .skip(scrollback_len - offset)
             // when scrollback_offset > rows_len (e.g. rows = 3,
             // scrollback_len = 10, offset = 9) the skip(10 - 9)
             // will take 9 rows instead of 3. we need to set
@@ -141,7 +158,7 @@ impl Grid {
             .chain(
                 self.rows
                     .iter()
-                    .take(rows_len.saturating_sub(self.scrollback_offset)),
+                    .take(rows_len.saturating_sub(offset)),
             )
     }
 
@@ -579,6 +596,9 @@ impl Grid {
             self.rows
                 .insert(usize::from(self.scroll_bottom) + 1, self.new_row());
             let removed = self.rows.remove(usize::from(self.scroll_top));
+            if self.deliver_history && self.scroll_top == 0 {
+                self.pending_history.push(removed.cells().cloned().collect());
+            }
             if self.scrollback_len > 0 && self.scroll_top == 0 {
                 self.scrollback_total = self.scrollback_total.saturating_add(1);
                 self.scrollback.push_back(removed);
@@ -693,7 +713,11 @@ impl Grid {
             let mut prev_pos = self.pos;
             self.pos.col = 0;
             let scrolled = self.row_inc_scroll(1);
-            prev_pos.row -= scrolled;
+            let Some(previous_row) = prev_pos.row.checked_sub(scrolled) else {
+                // A one-row grid has scrolled the previous row into history.
+                return;
+            };
+            prev_pos.row = previous_row;
             let new_pos = self.pos;
             self.drawing_row_mut(prev_pos.row)
                 // we assume self.pos.row is always valid, and so prev_pos.row

@@ -207,3 +207,73 @@ fn history_reset_clears_saved_rows_without_erasing_the_draft_or_repeating_rows()
     parser.process(b"\r\nNEXT");
     assert_eq!(parser.screen().history_since(total).count(), 1);
 }
+
+#[test]
+fn public_paste_serializer_preserves_bytes_including_framing_markers() {
+    let text = "שלום\n\x1b[200~literal\x1b[201~";
+    assert_eq!(paste_bytes(text, false), text.as_bytes());
+    assert_eq!(
+        paste_bytes(text, true),
+        format!("\x1b[200~{text}\x1b[201~").as_bytes()
+    );
+}
+
+#[test]
+fn function_editing_and_legacy_mouse_encodings() {
+    for (key, expected) in [
+        (KeyCode::Home, "\x1b[H"),
+        (KeyCode::End, "\x1b[F"),
+        (KeyCode::Insert, "\x1b[2~"),
+        (KeyCode::Delete, "\x1b[3~"),
+        (KeyCode::PageUp, "\x1b[5~"),
+        (KeyCode::PageDown, "\x1b[6~"),
+    ] {
+        assert_eq!(
+            key_bytes(KeyEvent::new(key, Mod::NONE), false),
+            expected.as_bytes()
+        );
+    }
+    for (number, expected) in [
+        (1, "\x1bOP"),
+        (2, "\x1bOQ"),
+        (3, "\x1bOR"),
+        (4, "\x1bOS"),
+        (5, "\x1b[15~"),
+        (6, "\x1b[17~"),
+        (7, "\x1b[18~"),
+        (8, "\x1b[19~"),
+        (9, "\x1b[20~"),
+        (10, "\x1b[21~"),
+        (11, "\x1b[23~"),
+        (12, "\x1b[24~"),
+    ] {
+        assert_eq!(
+            key_bytes(KeyEvent::new(KeyCode::F(number), Mod::NONE), false),
+            expected.as_bytes()
+        );
+    }
+    let event = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 0,
+        row: 3,
+        modifiers: Mod::NONE,
+    };
+    assert_eq!(
+        mouse_bytes(
+            event,
+            vt100::MouseProtocolMode::Press,
+            vt100::MouseProtocolEncoding::Default,
+            7
+        ),
+        b"\x1b[M ($"
+    );
+    assert_eq!(
+        mouse_bytes(
+            event,
+            vt100::MouseProtocolMode::Press,
+            vt100::MouseProtocolEncoding::Utf8,
+            223
+        ),
+        "\x1b[M Ā$".as_bytes()
+    );
+}

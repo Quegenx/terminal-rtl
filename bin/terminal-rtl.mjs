@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-import {launchNativeAgent} from './native-launchers.mjs';
+import {readFileSync} from 'node:fs';
+import {launchNativeAgent} from './lib/agent-launcher.mjs';
 const [agent, ...args] = process.argv.slice(2);
 if (agent === 'codex' || agent === 'grok') {
   launchNativeAgent(agent, args);
+} else if (agent === '--version' || agent === '-V') {
+  console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
 } else if (!agent || agent === '--help' || agent === '-h') {
   console.log('Terminal RTL\nPowered by: Gal Havkin\nUsage: terminal-rtl <codex|grok> [native CLI arguments]');
 } else {

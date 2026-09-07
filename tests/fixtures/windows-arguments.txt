@@ -1,0 +1,11 @@
+plain
+space value
+
+O'Brien
+שלום
+a&b
+a|b
+a>b
+%PATH%
+$HOME
+(parentheses)

@@ -145,6 +145,9 @@ impl RowFormat {
 
 /// Native message markers are heuristics; unknown rows keep an empty margin.
 pub fn speaker_labels(rows: &[Vec<vt100::Cell>], agent: Option<&str>) -> Vec<Option<String>> {
+    let Some(agent) = agent else {
+        return vec![None; rows.len()];
+    };
     let texts: Vec<String> = rows
         .iter()
         .map(|cells| {
@@ -154,7 +157,7 @@ pub fn speaker_labels(rows: &[Vec<vt100::Cell>], agent: Option<&str>) -> Vec<Opt
                 .collect()
         })
         .collect();
-    let minimal = agent == Some("grok")
+    let minimal = agent == "grok"
         && texts.iter().any(|text| {
             let text = text.trim();
             text.starts_with("minimal ·")
@@ -166,7 +169,6 @@ pub fn speaker_labels(rows: &[Vec<vt100::Cell>], agent: Option<&str>) -> Vec<Opt
     texts
         .iter()
         .map(|text| {
-            let agent = agent?;
             let trimmed = text.trim_start();
             if trimmed.starts_with("```") {
                 fenced = !fenced;
@@ -231,12 +233,26 @@ fn timestamped(text: &str) -> bool {
     if body.trim().is_empty() {
         return false;
     }
-    let clock = clock.trim().trim_end_matches(" AM").trim_end_matches(" PM");
+    let clock = clock.trim();
+    let twelve_hour = clock.ends_with(" AM") || clock.ends_with(" PM");
+    let clock = if twelve_hour {
+        &clock[..clock.len() - 3]
+    } else {
+        clock
+    };
     let Some((hour, minute)) = clock.split_once(':') else {
         return false;
     };
     (1..=2).contains(&hour.len())
         && minute.len() == 2
-        && hour.parse::<u8>().is_ok_and(|h| h < 24)
+        && hour.bytes().all(|c| c.is_ascii_digit())
+        && minute.bytes().all(|c| c.is_ascii_digit())
+        && hour.parse::<u8>().is_ok_and(|h| {
+            if twelve_hour {
+                (1..=12).contains(&h)
+            } else {
+                h < 24
+            }
+        })
         && minute.parse::<u8>().is_ok_and(|m| m < 60)
 }

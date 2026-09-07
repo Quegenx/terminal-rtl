@@ -1,6 +1,8 @@
 /// This trait is used by the parser to handle extra escape sequences that
 /// don't have an impact on the terminal screen directly.
 pub trait Callbacks {
+    /// Reset callback-owned terminal modes after RIS.
+    fn reset(&mut self, _: &mut crate::Screen) {}
     /// This callback is called when the terminal requests an audible bell
     /// (typically with `^G`).
     fn audible_bell(&mut self, _: &mut crate::Screen) {}

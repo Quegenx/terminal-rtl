@@ -1,4 +1,6 @@
 pub mod display;
-pub mod input;
-pub mod pretty;
-pub mod protocol;
+mod terminal;
+
+// Preserve the public module paths while grouping implementation by domain.
+pub use display::formatting as pretty;
+pub use terminal::{input, protocol};
