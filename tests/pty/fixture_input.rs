@@ -31,3 +31,15 @@ pub(super) fn read_fixture_bytes(bytes: &mut [u8]) -> io::Result<()> {
     }
     Ok(())
 }
+
+pub(super) fn trace_geometry(dimensions: (u16, u16), stage: &str) {
+    use std::io::Write;
+    if let Some(path) = std::env::var_os("RTL_TEST_GEOMETRY_TRACE") {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .unwrap();
+        writeln!(file, "{dimensions:?}: {stage}").unwrap();
+    }
+}

@@ -1,6 +1,9 @@
-//! ReadConsoleInput preserves modifiers, UTF-16, repeat counts and paste ESCs.
-//! Crossterm's Windows decoder drops VK=0 control characters and has no Paste event.
-use super::{input_reader::HostInput, windows_mouse::ConsoleMouse};
+//! Native console records plus VT input preserve both modifiers and paste framing.
+use super::{
+    input_reader::HostInput,
+    windows_mouse::ConsoleMouse,
+    windows_sequence::{ConsoleSequence, decode_console_sequence},
+};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::{
     collections::VecDeque,
@@ -11,7 +14,7 @@ use windows_sys::Win32::System::Console::*;
 
 pub(super) struct HostInputReader {
     ready: VecDeque<HostInput>,
-    opener: Vec<KEY_EVENT_RECORD>,
+    opener: Vec<u16>,
     paste: Option<Vec<u16>>,
     last_key: Instant,
     mouse: ConsoleMouse,
@@ -88,18 +91,6 @@ impl HostInputReader {
     }
 
     fn accept_key(&mut self, key: KEY_EVENT_RECORD) {
-        #[cfg(debug_assertions)]
-        if std::env::var_os("RTL_TEST_SCENARIO").is_some() {
-            eprintln!(
-                "NATIVE_DIAG vk={} sc={} uc={} down={} state={} repeat={}",
-                key.wVirtualKeyCode,
-                key.wVirtualScanCode,
-                unsafe { key.uChar.UnicodeChar },
-                key.bKeyDown,
-                key.dwControlKeyState,
-                key.wRepeatCount
-            );
-        }
         // Ignore release events as on the existing crossterm input path, except
         // Alt-code releases, whose UnicodeChar is the actual typed character.
         let alt_code =
@@ -108,6 +99,13 @@ impl HostInputReader {
             return;
         }
         let unit = unsafe { key.uChar.UnicodeChar };
+        if matches!(key.wVirtualKeyCode, 16..=18) && unit == 0 {
+            return; // Modifier transitions must not consume the Ctrl+] prefix.
+        }
+        if key.wVirtualKeyCode != 0 {
+            self.ready.push_back(native_key_input(key));
+            return;
+        }
         self.last_key = Instant::now();
         if let Some(text) = &mut self.paste {
             text.extend(std::iter::repeat_n(
@@ -125,26 +123,47 @@ impl HostInputReader {
             }
             return;
         }
-        const OPENER: [u16; 6] = [27, 91, 50, 48, 48, 126];
-        if unit == OPENER[self.opener.len()] && key.wRepeatCount <= 1 {
-            self.opener.push(key);
-            if self.opener.len() == OPENER.len() {
-                self.opener.clear();
-                self.paste = Some(Vec::new());
+        if self.opener.is_empty() {
+            if unit == 27 {
+                self.opener.push(unit);
+            } else {
+                self.ready.push_back(native_key_input(key));
             }
             return;
         }
-        self.flush_opener();
-        if unit == 27 && key.wRepeatCount <= 1 {
-            self.opener.push(key);
+        self.opener.push(unit);
+        let complete = if self.opener.get(1) == Some(&91) {
+            self.opener.len() > 2 && (64..=126).contains(&unit)
         } else {
-            self.ready.push_back(native_key_input(key));
+            self.opener.len() > 2 || unit != 79
+        };
+        if complete || self.opener.len() >= 128 {
+            let sequence = std::mem::take(&mut self.opener);
+            match decode_console_sequence(&sequence) {
+                ConsoleSequence::Key(key) => {
+                    // Decoded native key records are already past the VT layer.
+                    if key.bKeyDown != 0
+                        && !(matches!(key.wVirtualKeyCode, 16..=18)
+                            && unsafe { key.uChar.UnicodeChar } == 0)
+                    {
+                        self.ready.push_back(native_key_input(key));
+                    }
+                }
+                ConsoleSequence::Input(input) => self.ready.push_back(input),
+                ConsoleSequence::Paste => self.paste = Some(Vec::new()),
+            }
         }
     }
 
     fn flush_opener(&mut self) {
-        self.ready
-            .extend(self.opener.drain(..).map(native_key_input));
+        if !self.opener.is_empty() {
+            self.ready.push_back(HostInput {
+                event: Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+                native_key: Some(
+                    String::from_utf16_lossy(&std::mem::take(&mut self.opener)).into_bytes(),
+                ),
+            });
+        }
     }
 }
 
@@ -172,7 +191,10 @@ fn native_key_input(key: KEY_EVENT_RECORD) -> HostInput {
         (34, _) => KeyCode::PageDown,
         (_, unit) => char::from_u32(u32::from(unit)).map_or(KeyCode::Null, KeyCode::Char),
     };
-    let modifiers = console_modifiers(key.dwControlKeyState);
+    let mut modifiers = console_modifiers(key.dwControlKeyState);
+    if unit == 29 {
+        modifiers |= KeyModifiers::CONTROL;
+    }
     let event = KeyEvent::new_with_kind(code, modifiers, KeyEventKind::Press);
     // Microsoft win32-input-mode: CSI Vk;Sc;Uc;Kd;Cs;Rc _. portable-pty's Windows
     // master is always ConPTY, which requests and accepts this native encoding.

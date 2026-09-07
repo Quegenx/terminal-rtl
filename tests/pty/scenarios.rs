@@ -44,7 +44,9 @@ pub(super) fn run_fixture() {
             out.flush().unwrap();
             let mut key = [0];
             for dimensions in [(4, 2), (1, 1), (70, 13)] {
+                super::fixture_input::trace_geometry(dimensions, "before input");
                 super::fixture_input::read_fixture_bytes(&mut key).unwrap();
+                super::fixture_input::trace_geometry(dimensions, "received input");
                 let deadline = Instant::now() + Duration::from_secs(3);
                 while crossterm::terminal::size().unwrap() != dimensions
                     && Instant::now() < deadline
@@ -52,8 +54,10 @@ pub(super) fn run_fixture() {
                     thread::sleep(Duration::from_millis(10));
                 }
                 assert_eq!(crossterm::terminal::size().unwrap(), dimensions);
+                super::fixture_input::trace_geometry(dimensions, "before wide output");
                 out.write_all("ab界\x1b[H\x1b[X界abc".as_bytes()).unwrap();
                 out.flush().unwrap();
+                super::fixture_input::trace_geometry(dimensions, "after wide output");
             }
             out.write_all(b"\r\nGEOMETRY_OK").unwrap();
             out.flush().unwrap();

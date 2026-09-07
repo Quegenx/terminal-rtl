@@ -20,6 +20,7 @@ src/
     input_reader.rs      platform input dispatch
     windows_input.rs     native key transport and paste framing
     windows_mouse.rs     native mouse coordinate and button decoding
+    windows_sequence.rs  ConPTY key envelopes and VT input sequences
     output.rs            bounded child-output reader
     shutdown.rs          platform termination notifications
   display/

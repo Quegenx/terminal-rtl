@@ -108,6 +108,11 @@ impl PtyHarness {
             command.arg("--no-replay");
         }
         if scenario.starts_with("resize-") {
+            command.env(
+                "RTL_TEST_GEOMETRY_TRACE",
+                std::env::temp_dir()
+                    .join(format!("rtl-geometry-{}-{scenario}", std::process::id())),
+            );
             command.args(["--agent-label", "codex", "--attribution"]);
         }
         if !scenario.ends_with("-launcher") {
@@ -208,6 +213,14 @@ impl PtyHarness {
                 return status.exit_code();
             }
             thread::sleep(Duration::from_millis(10));
+        }
+        for scenario in ["resize-replay", "resize-no-replay"] {
+            let path = std::env::temp_dir()
+                .join(format!("rtl-geometry-{}-{scenario}", std::process::id()));
+            if let Ok(trace) = std::fs::read_to_string(&path) {
+                eprintln!("Geometry progress: {trace}");
+            }
+            let _ = std::fs::remove_file(path);
         }
         panic!(
             "wrapper failed to exit: {:?}",

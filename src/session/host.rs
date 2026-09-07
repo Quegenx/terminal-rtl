@@ -36,6 +36,13 @@ impl TerminalGuard {
             execute!(out, EnterAlternateScreen)?;
             set_mouse_capture(&mut out, true)?;
         }
+        #[cfg(windows)]
+        {
+            // Without VT input, ConPTY consumes paste delimiters. Win32 input
+            // mode keeps native modifiers intact while VT input is enabled.
+            set_console_vt_input()?;
+            out.write_all(b"\x1b[?9001h")?;
+        }
         execute!(out, EnableBracketedPaste, EnableFocusChange)?;
         // Ask capable hosts to distinguish Shift+Enter from Enter. Sending ANSI
         // directly also works on ConPTY; crossterm's command rejects Windows.
@@ -51,6 +58,8 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let mut out = io::stdout();
+        #[cfg(windows)]
+        let _ = out.write_all(b"\x1b[?9001l");
         if self.keyboard_enhanced {
             let _ = out.write_all(b"\x1b[<1u");
         }
@@ -159,4 +168,20 @@ pub(super) fn set_mouse_capture(out: &mut impl Write, enabled: bool) -> io::Resu
             execute!(out, crossterm::event::DisableMouseCapture)
         }
     }
+}
+
+#[cfg(windows)]
+fn set_console_vt_input() -> io::Result<()> {
+    use windows_sys::Win32::System::Console::*;
+    // SAFETY: borrow the process input handle and update its current mode.
+    unsafe {
+        let handle = GetStdHandle(STD_INPUT_HANDLE);
+        let mut mode = 0;
+        if GetConsoleMode(handle, &mut mode) == 0
+            || SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_INPUT) == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
 }

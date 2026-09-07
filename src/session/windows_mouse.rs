@@ -65,3 +65,53 @@ impl ConsoleMouse {
         })))
     }
 }
+
+pub(super) fn sgr_mouse_event(parameters: &str, release: bool) -> Option<Event> {
+    let values = parameters
+        .split(';')
+        .map(str::parse::<u16>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let [code, x, y] = values.as_slice() else {
+        return None;
+    };
+    let button = match code & 3 {
+        0 => MouseButton::Left,
+        1 => MouseButton::Middle,
+        _ => MouseButton::Right,
+    };
+    let kind = if code & 64 != 0 {
+        match code & 3 {
+            0 => MouseEventKind::ScrollUp,
+            1 => MouseEventKind::ScrollDown,
+            2 => MouseEventKind::ScrollLeft,
+            _ => MouseEventKind::ScrollRight,
+        }
+    } else if release {
+        MouseEventKind::Up(button)
+    } else if code & 32 != 0 {
+        if code & 3 == 3 {
+            MouseEventKind::Moved
+        } else {
+            MouseEventKind::Drag(button)
+        }
+    } else {
+        MouseEventKind::Down(button)
+    };
+    let mut modifiers = crossterm::event::KeyModifiers::NONE;
+    if code & 4 != 0 {
+        modifiers |= crossterm::event::KeyModifiers::SHIFT;
+    }
+    if code & 8 != 0 {
+        modifiers |= crossterm::event::KeyModifiers::ALT;
+    }
+    if code & 16 != 0 {
+        modifiers |= crossterm::event::KeyModifiers::CONTROL;
+    }
+    Some(Event::Mouse(MouseEvent {
+        kind,
+        column: x.checked_sub(1)?,
+        row: y.checked_sub(1)?,
+        modifiers,
+    }))
+}

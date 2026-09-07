@@ -10,6 +10,8 @@ mod shutdown;
 mod windows_input;
 #[cfg(windows)]
 mod windows_mouse;
+#[cfg(windows)]
+mod windows_sequence;
 
 use anyhow::{Context, Result};
 use crossterm::terminal;
