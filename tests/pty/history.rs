@@ -40,7 +40,7 @@ fn real_pty_wheel_browses_history_without_changing_draft_and_preserves_native_mo
 #[test]
 fn inline_resume_uses_native_history_and_leaves_selection_to_the_terminal() {
     let mut harness = PtyHarness::new("inline-history");
-    harness.until("INLINE_DRAFT_READY");
+    harness.until_screen(&["INLINE_DRAFT_READY", "Powered by: Gal Havkin"]);
     // Allow the independent xterm.js check to consume only this synthetic fixture.
     if let Some(path) = std::env::var_os("RTL_TEST_HOST_CAPTURE") {
         std::fs::write(path, &harness.output).unwrap();

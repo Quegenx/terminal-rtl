@@ -90,6 +90,10 @@ impl PtyHarness {
         } else {
             CommandBuilder::new(env!("CARGO_BIN_EXE_rtl"))
         };
+        #[cfg(windows)]
+        for (key, value) in std::env::vars_os() {
+            command.env(key, value);
+        }
         let geometry_trace = scenario.starts_with("resize-").then(|| {
             std::env::temp_dir().join(format!("rtl-geometry-{}-{scenario}", std::process::id()))
         });
@@ -194,6 +198,20 @@ impl PtyHarness {
             self.host.screen().contents(),
             String::from_utf8_lossy(&self.output)
         );
+    }
+
+    pub(super) fn until_screen(&mut self, needles: &[&str]) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            let contents = self.host.screen().contents();
+            if needles.iter().all(|needle| contents.contains(needle)) {
+                return;
+            }
+            if let Ok(bytes) = self.receive.recv_timeout(Duration::from_millis(20)) {
+                self.accept_output(&bytes);
+            }
+        }
+        panic!("incomplete host frame: {:?}", self.host.screen().contents());
     }
 
     // A one-cell viewport cannot display an acknowledgement. Observe the

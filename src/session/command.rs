@@ -5,6 +5,12 @@ use portable_pty::CommandBuilder;
 
 pub(super) fn child_command(args: &[OsString]) -> Result<CommandBuilder> {
     let mut cmd = platform_command(args);
+    // portable-pty overlays Windows registry values on the process environment.
+    // Native agents and their subprocesses must retain the caller's PATH/config.
+    #[cfg(windows)]
+    for (key, value) in std::env::vars_os() {
+        cmd.env(key, value);
+    }
     // portable-pty defaults to the user's home, not the caller's directory.
     cmd.cwd(std::env::current_dir().context("cannot resolve working directory")?);
     cmd.env("TERM", "xterm-256color");
