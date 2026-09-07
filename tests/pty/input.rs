@@ -63,7 +63,8 @@ fn real_pty_toggle_and_literal_prefix() {
     harness.send(b"\x1d\x1d");
     harness.until("PREFIX_OK");
     harness.send(b"\x1dx");
-    assert_eq!(harness.finish(), 0);
+    let code = harness.finish();
+    assert_eq!(code, 0, "{:?}", String::from_utf8_lossy(&harness.output));
     assert!(String::from_utf8_lossy(&harness.output).contains("PREFIX_OK"));
 }
 

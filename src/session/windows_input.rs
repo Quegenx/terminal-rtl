@@ -88,6 +88,18 @@ impl HostInputReader {
     }
 
     fn accept_key(&mut self, key: KEY_EVENT_RECORD) {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("RTL_TEST_SCENARIO").is_some() {
+            eprintln!(
+                "NATIVE_DIAG vk={} sc={} uc={} down={} state={} repeat={}",
+                key.wVirtualKeyCode,
+                key.wVirtualScanCode,
+                unsafe { key.uChar.UnicodeChar },
+                key.bKeyDown,
+                key.dwControlKeyState,
+                key.wRepeatCount
+            );
+        }
         // Ignore release events as on the existing crossterm input path, except
         // Alt-code releases, whose UnicodeChar is the actual typed character.
         let alt_code =

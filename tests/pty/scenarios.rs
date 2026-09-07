@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Write},
+    io::Write,
     thread,
     time::{Duration, Instant},
 };
@@ -13,7 +13,6 @@ pub(super) fn run_fixture() {
         std::path::PathBuf::from(std::env::var_os("RTL_TEST_EXPECTED_CWD").unwrap())
     );
     let mut out = std::io::stdout();
-    let mut input = std::io::stdin();
     out.write_all(b"\x1b[2J\x1b[H").unwrap();
     match scenario.as_str() {
         "shutdown" | "shutdown-launcher" => {
@@ -21,7 +20,7 @@ pub(super) fn run_fixture() {
             write!(out, "CHILD_PID_{}_READY", std::process::id()).unwrap();
             out.flush().unwrap();
             let mut key = [0];
-            input.read_exact(&mut key).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut key).unwrap();
             std::process::exit(0);
         }
         "paste-boundary" => {
@@ -32,7 +31,7 @@ pub(super) fn run_fixture() {
             // events; the wire protocol cannot encode a literal closer.
             let expected = b"\x1b[200~safe\x1b[200~inside\x1b[201~AFTER";
             let mut bytes = vec![0; expected.len()];
-            input.read_exact(&mut bytes).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut bytes).unwrap();
             assert_eq!(bytes, expected);
             std::process::exit(0);
         }
@@ -45,7 +44,7 @@ pub(super) fn run_fixture() {
             out.flush().unwrap();
             let mut key = [0];
             for dimensions in [(4, 2), (1, 1), (70, 13)] {
-                input.read_exact(&mut key).unwrap();
+                super::fixture_input::read_fixture_bytes(&mut key).unwrap();
                 let deadline = Instant::now() + Duration::from_secs(3);
                 while crossterm::terminal::size().unwrap() != dimensions
                     && Instant::now() < deadline
@@ -66,7 +65,7 @@ pub(super) fn run_fixture() {
             out.write_all(b"LAUNCHER_READY").unwrap();
             out.flush().unwrap();
             let mut key = [0];
-            input.read_exact(&mut key).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut key).unwrap();
             assert_eq!(key, [b'x']);
             std::process::exit(9);
         }
@@ -78,17 +77,17 @@ pub(super) fn run_fixture() {
             out.write_all(b"\x1b[3J\x1bcAFTER_RESET\r\nRESET_2\r\nRESET_3\r\nRESET_4\r\nRESET_5\r\nRESET_6\r\nRESET_7\r\nRESET_8\r\nRESET_9\r\nRESET_10\r\nBURST_READY").unwrap();
             out.flush().unwrap();
             let mut key = [0];
-            input.read_exact(&mut key).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut key).unwrap();
             std::process::exit(0);
         }
         "shift-enter" => {
-            enable_fixture_raw_mode();
+            crossterm::terminal::enable_raw_mode().unwrap();
             out.write_all(b"SHIFT_ENTER_READY").unwrap();
             out.flush().unwrap();
             #[cfg(unix)]
             {
                 let mut shifted = [0; 7];
-                input.read_exact(&mut shifted).unwrap();
+                super::fixture_input::read_fixture_bytes(&mut shifted).unwrap();
                 assert_eq!(&shifted, b"\x1b[13;2u", "Shift+Enter must not submit");
             }
             #[cfg(windows)]
@@ -98,7 +97,7 @@ pub(super) fn run_fixture() {
             #[cfg(unix)]
             {
                 let mut enter = [0];
-                input.read_exact(&mut enter).unwrap();
+                super::fixture_input::read_fixture_bytes(&mut enter).unwrap();
                 assert_eq!(enter, [b'\r'], "plain Enter still submits");
             }
             #[cfg(windows)]
@@ -118,7 +117,7 @@ pub(super) fn run_fixture() {
                 .unwrap();
             out.flush().unwrap();
             let mut key = [0];
-            input.read_exact(&mut key).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut key).unwrap();
             assert_eq!(key, [b'x']);
             std::process::exit(0);
         }
@@ -130,13 +129,13 @@ pub(super) fn run_fixture() {
             out.write_all(b"SCROLL_READY draft").unwrap();
             out.flush().unwrap();
             let mut typed = [0];
-            input.read_exact(&mut typed).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut typed).unwrap();
             assert_eq!(typed, [b'x'], "scrolling must not send prompt-history keys");
             out.write_all(b"\r\n\x1b[?1000h\x1b[?1006hNATIVE_MOUSE_READY")
                 .unwrap();
             out.flush().unwrap();
             let mut wheel = [0; 10];
-            input.read_exact(&mut wheel).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut wheel).unwrap();
             assert_eq!(&wheel, b"\x1b[<65;4;5M");
             out.write_all(b"\r\nWHEEL_OK").unwrap();
             out.flush().unwrap();
@@ -147,7 +146,7 @@ pub(super) fn run_fixture() {
             out.write_all(b"DELETE_READY").unwrap();
             out.flush().unwrap();
             let mut bytes = [0; 5];
-            input.read_exact(&mut bytes).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut bytes).unwrap();
             assert_eq!(&bytes, b"\x7f\x1b[3~");
             out.write_all(b"\r\nDELETE_OK").unwrap();
             out.flush().unwrap();
@@ -187,18 +186,18 @@ pub(super) fn run_fixture() {
             out.write_all("שלום\x1b[6n".as_bytes()).unwrap();
             out.flush().unwrap();
             let mut query = [0; 6];
-            input.read_exact(&mut query).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut query).unwrap();
             assert_eq!(&query, b"\x1b[1;5R");
             out.write_all(b"\r\nQUERY_OK\r\n\x1b[?2004h").unwrap();
             out.flush().unwrap();
             let expected = "\x1b[200~שלום English 123\x1b[201~".as_bytes();
             let mut paste = vec![0; expected.len()];
-            input.read_exact(&mut paste).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut paste).unwrap();
             assert_eq!(paste, expected);
             out.write_all(b"PASTE_OK\r\nRESIZE_READY\r\n").unwrap();
             out.flush().unwrap();
             let mut trigger = [0];
-            input.read_exact(&mut trigger).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut trigger).unwrap();
             let deadline = Instant::now() + Duration::from_secs(3);
             while crossterm::terminal::size().unwrap() != (expected_cols, expected_rows)
                 && Instant::now() < deadline
@@ -211,7 +210,7 @@ pub(super) fn run_fixture() {
             );
             out.write_all(b"RESIZE_OK\r\n").unwrap();
             out.flush().unwrap();
-            input.read_exact(&mut trigger).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut trigger).unwrap();
             assert_eq!(trigger, [3]);
             out.write_all(b"CTRL_C_OK\r\n").unwrap();
             out.flush().unwrap();
@@ -223,12 +222,12 @@ pub(super) fn run_fixture() {
             out.write_all("שלום\r\nTOGGLE_READY".as_bytes()).unwrap();
             out.flush().unwrap();
             let mut byte = [0];
-            input.read_exact(&mut byte).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut byte).unwrap();
             assert_eq!(byte, [0x1d]);
             out.write_all(b"\r\nPREFIX_OK\r\n").unwrap();
             out.flush().unwrap();
             let mut unknown = [0; 2];
-            input.read_exact(&mut unknown).unwrap();
+            super::fixture_input::read_fixture_bytes(&mut unknown).unwrap();
             assert_eq!(unknown, [0x1d, b'x']);
             std::process::exit(0);
         }

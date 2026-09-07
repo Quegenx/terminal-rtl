@@ -1,4 +1,5 @@
 //! Real nested PTY journeys; modules share one bounded harness pool.
+mod fixture_input;
 mod harness;
 mod history;
 mod input;
