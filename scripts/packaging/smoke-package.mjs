@@ -13,7 +13,7 @@ const tar = process.platform === 'win32'
 const root = mkdtempSync(join(tmpdir(), 'rtl-extracted-package-'));
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {encoding:'utf8', timeout:120000, ...options});
-  assert.equal(result.status, 0, result.stderr || String(result.error));
+  assert.equal(result.status, 0, [result.stdout, result.stderr, result.error].filter(Boolean).join('\n'));
   return result.stdout;
 }
 try {

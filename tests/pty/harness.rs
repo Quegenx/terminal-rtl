@@ -71,10 +71,16 @@ impl PtyHarness {
                 pixel_height: 0,
             })
             .unwrap();
-        let mut command = if scenario.ends_with("-launcher") {
-            let mut command = CommandBuilder::new(
-                std::env::var("RTL_TEST_JS_RUNTIME").unwrap_or_else(|_| "node".into()),
-            );
+        let mut command = CommandBuilder::new(if scenario.ends_with("-launcher") {
+            std::env::var("RTL_TEST_JS_RUNTIME").unwrap_or_else(|_| "node".into())
+        } else {
+            env!("CARGO_BIN_EXE_rtl").into()
+        });
+        #[cfg(windows)]
+        for (key, value) in std::env::vars_os() {
+            command.env(key, value);
+        }
+        if scenario.ends_with("-launcher") {
             let root = std::env::var_os("RTL_TEST_PACKAGE_ROOT")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
@@ -86,13 +92,6 @@ impl PtyHarness {
                 command.env_remove("RTL_BIN");
             }
             command.env("RTL_CODEX_BIN", program);
-            command
-        } else {
-            CommandBuilder::new(env!("CARGO_BIN_EXE_rtl"))
-        };
-        #[cfg(windows)]
-        for (key, value) in std::env::vars_os() {
-            command.env(key, value);
         }
         let geometry_trace = scenario.starts_with("resize-").then(|| {
             std::env::temp_dir().join(format!("rtl-geometry-{}-{scenario}", std::process::id()))
