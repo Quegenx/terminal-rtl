@@ -17,6 +17,9 @@ src/
     engine.rs            output/input scheduling and exit decisions
     host.rs              terminal modes, decorations, and resize
     interaction.rs       prefix keys, browsing, paste, and mouse routing
+    input_reader.rs      platform input dispatch
+    windows_input.rs     native key transport and paste framing
+    windows_mouse.rs     native mouse coordinate and button decoding
     output.rs            bounded child-output reader
     shutdown.rs          platform termination notifications
   display/

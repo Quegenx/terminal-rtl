@@ -7,7 +7,11 @@ fn real_pty_shift_enter_preserves_modifier_and_restores_host_keyboard() {
     let mut harness = PtyHarness::new("shift-enter");
     harness.until("SHIFT_ENTER_READY");
     assert!(String::from_utf8_lossy(&harness.output).contains("\x1b[>1u"));
+    #[cfg(unix)]
     harness.send(b"\x1b[13;2u");
+    // ConPTY requests win32-input-mode; native hosts send Shift in its state bits.
+    #[cfg(windows)]
+    harness.send(b"\x1b[13;28;13;1;16;1_");
     harness.until("NEWLINE_RECEIVED");
     harness.send(b"\r");
     assert_eq!(harness.finish(), 0);

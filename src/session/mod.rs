@@ -2,9 +2,14 @@
 mod command;
 mod engine;
 mod host;
+mod input_reader;
 mod interaction;
 mod output;
 mod shutdown;
+#[cfg(windows)]
+mod windows_input;
+#[cfg(windows)]
+mod windows_mouse;
 
 use anyhow::{Context, Result};
 use crossterm::terminal;

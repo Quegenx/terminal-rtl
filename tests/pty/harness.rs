@@ -114,6 +114,21 @@ impl PtyHarness {
             command.arg(program);
         }
         command.args(child_args);
+        if matches!(scenario, "inline-history" | "inline-burst") {
+            // Seed the actual console before rtl starts; an outer ConPTY can
+            // clear a synthetic parser-only seed during its own initialization.
+            let argv = command.get_argv().clone();
+            command.env("RTL_TEST_HOST_ARG_COUNT", argv.len().to_string());
+            for (index, argument) in argv.iter().enumerate() {
+                command.env(format!("RTL_TEST_HOST_ARG_{index}"), argument);
+            }
+            *command.get_argv_mut() = vec![
+                std::env::current_exe().unwrap().into(),
+                "--exact".into(),
+                "host_fixture".into(),
+                "--nocapture".into(),
+            ];
+        }
         let child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().unwrap();

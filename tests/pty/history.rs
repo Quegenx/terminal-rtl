@@ -60,7 +60,6 @@ fn inline_resume_uses_native_history_and_leaves_selection_to_the_terminal() {
         1000,
         terminal_rtl::protocol::Protocol::default(),
     );
-    host.process(b"EARLIER_SHELL_OUTPUT");
     host.process(&harness.output);
     assert!(!host.screen().alternate_screen());
     let history: Vec<_> = host.screen().history_since(0).collect();
@@ -120,7 +119,6 @@ fn inline_bursts_and_child_clears_preserve_host_history() {
         std::fs::write(path, &harness.output).unwrap();
     }
     let mut host = vt100::Parser::new(12, 60, 1000);
-    host.process(b"EARLIER_SHELL_OUTPUT");
     host.process(&harness.output);
     let history: String = host
         .screen()

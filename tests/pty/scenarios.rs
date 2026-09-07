@@ -85,14 +85,24 @@ pub(super) fn run_fixture() {
             enable_fixture_raw_mode();
             out.write_all(b"SHIFT_ENTER_READY").unwrap();
             out.flush().unwrap();
-            let mut shifted = [0; 7];
-            input.read_exact(&mut shifted).unwrap();
-            assert_eq!(&shifted, b"\x1b[13;2u", "Shift+Enter must not submit");
+            #[cfg(unix)]
+            {
+                let mut shifted = [0; 7];
+                input.read_exact(&mut shifted).unwrap();
+                assert_eq!(&shifted, b"\x1b[13;2u", "Shift+Enter must not submit");
+            }
+            #[cfg(windows)]
+            assert_fixture_enter(true);
             out.write_all(b"\r\nNEWLINE_RECEIVED").unwrap();
             out.flush().unwrap();
-            let mut enter = [0];
-            input.read_exact(&mut enter).unwrap();
-            assert_eq!(enter, [b'\r'], "plain Enter still submits");
+            #[cfg(unix)]
+            {
+                let mut enter = [0];
+                input.read_exact(&mut enter).unwrap();
+                assert_eq!(enter, [b'\r'], "plain Enter still submits");
+            }
+            #[cfg(windows)]
+            assert_fixture_enter(false);
             std::process::exit(0);
         }
         "inline-history" => {
@@ -243,6 +253,24 @@ fn enable_fixture_raw_mode() {
                 SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_INPUT),
                 0
             );
+        }
+    }
+}
+
+#[cfg(windows)]
+fn assert_fixture_enter(shift: bool) {
+    use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+    loop {
+        assert!(
+            event::poll(Duration::from_secs(3)).unwrap(),
+            "missing Enter"
+        );
+        if let Event::Key(key) = event::read().unwrap()
+            && key.kind == KeyEventKind::Press
+        {
+            assert_eq!(key.code, KeyCode::Enter);
+            assert_eq!(key.modifiers.contains(KeyModifiers::SHIFT), shift);
+            break;
         }
     }
 }

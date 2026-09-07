@@ -6,13 +6,14 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use crossterm::{event, terminal};
+use crossterm::terminal;
 use portable_pty::MasterPty;
 use terminal_rtl::{display::Renderer, protocol::Protocol};
 
 use super::{
     ChildGuard,
     host::{child_geometry, configure_renderer, resize, set_mouse_capture},
+    input_reader::HostInputReader,
     interaction::{InputAction, SessionInput},
     output::ChildOutput,
     shutdown::Shutdown,
@@ -59,6 +60,7 @@ impl TerminalSession<'_> {
         renderer.set_layout(args.layout);
         configure_renderer(&mut renderer, args, current_size.0, current_size.1);
         let mut input = SessionInput::new(args);
+        let mut host_input = HostInputReader::new();
         let mut mouse_capture = !args.inline;
         let mut dirty = true;
         let mut eof = false;
@@ -209,10 +211,10 @@ impl TerminalSession<'_> {
                 ));
             }
 
-            if !event::poll(Duration::from_millis(4))? {
+            let Some(event) = host_input.read(Duration::from_millis(4))? else {
                 continue;
-            }
-            match input.handle(event::read()?, &parser, &renderer) {
+            };
+            match input.handle(event, &parser, &renderer) {
                 InputAction::Ignore => {}
                 InputAction::Redraw => dirty = true,
                 InputAction::Resize(cols, rows) => {

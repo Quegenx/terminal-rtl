@@ -5,6 +5,7 @@ use terminal_rtl::{
     protocol::Protocol,
 };
 
+use super::input_reader::HostInput;
 use crate::Args;
 
 pub(super) enum InputAction {
@@ -34,10 +35,16 @@ impl SessionInput {
 
     pub(super) fn handle(
         &mut self,
-        event: Event,
+        host_input: HostInput,
         parser: &vt100::Parser<Protocol>,
         renderer: &Renderer,
     ) -> InputAction {
+        let HostInput { event, native_key } = host_input;
+        let encode_key = |key| {
+            native_key
+                .clone()
+                .unwrap_or_else(|| key_bytes(key, parser.screen().application_cursor()))
+        };
         let screen = parser.screen();
         let mut redraw = false;
         let bytes = match event {
@@ -56,7 +63,7 @@ impl SessionInput {
                         KeyCode::Char('q') => return InputAction::Quit,
                         _ => {
                             let mut bytes = if is_prefix { Vec::new() } else { vec![0x1d] };
-                            bytes.extend(key_bytes(key, screen.application_cursor()));
+                            bytes.extend(encode_key(key));
                             bytes
                         }
                     }
@@ -78,7 +85,7 @@ impl SessionInput {
                         self.scrollback = 0;
                         redraw = true;
                     }
-                    key_bytes(key, screen.application_cursor())
+                    encode_key(key)
                 }
             }
             Event::Paste(text) => {
