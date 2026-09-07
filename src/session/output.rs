@@ -6,7 +6,6 @@ use std::{
 
 pub(super) enum ChildOutput {
     Data(Vec<u8>),
-    End,
     Error(io::Error),
 }
 
@@ -17,10 +16,7 @@ pub(super) fn read_child_output(mut reader: Box<dyn Read + Send>) -> mpsc::Recei
         let mut buffer = [0; 8192];
         loop {
             match reader.read(&mut buffer) {
-                Ok(0) => {
-                    let _ = send.send(ChildOutput::End);
-                    break;
-                }
+                Ok(0) => break,
                 Ok(count) => {
                     if send
                         .send(ChildOutput::Data(buffer[..count].to_vec()))
@@ -31,10 +27,7 @@ pub(super) fn read_child_output(mut reader: Box<dyn Read + Send>) -> mpsc::Recei
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 // Unix PTYs commonly report EIO when the last slave closes.
-                Err(e) if cfg!(unix) && e.raw_os_error() == Some(5) => {
-                    let _ = send.send(ChildOutput::End);
-                    break;
-                }
+                Err(e) if cfg!(unix) && e.raw_os_error() == Some(5) => break,
                 Err(e) => {
                     let _ = send.send(ChildOutput::Error(e));
                     break;

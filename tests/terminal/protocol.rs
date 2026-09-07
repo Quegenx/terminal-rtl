@@ -117,11 +117,16 @@ fn invalid_link_metadata_cannot_emit_terminal_controls() {
 
 #[test]
 fn paste_uses_the_childs_mode_and_preserves_original_order() {
-    assert_eq!(paste_bytes("שלום\nworld", false), "שלום\nworld".as_bytes());
-    assert_eq!(
-        paste_bytes("שלום\nworld", true),
-        "\x1b[200~שלום\nworld\x1b[201~".as_bytes()
-    );
+    for (text, bracketed) in [
+        ("שלום\nworld", "\x1b[200~שלום\nworld\x1b[201~"),
+        (
+            "שלום\n\x1b[200~literal\x1b[201~",
+            "\x1b[200~שלום\n\x1b[200~literal\x1b[201~\x1b[201~",
+        ),
+    ] {
+        assert_eq!(paste_bytes(text, false), text.as_bytes());
+        assert_eq!(paste_bytes(text, true), bracketed.as_bytes());
+    }
 }
 
 #[test]
@@ -206,16 +211,6 @@ fn history_reset_clears_saved_rows_without_erasing_the_draft_or_repeating_rows()
     assert_eq!(parser.screen().contents(), visible);
     parser.process(b"\r\nNEXT");
     assert_eq!(parser.screen().history_since(total).count(), 1);
-}
-
-#[test]
-fn public_paste_serializer_preserves_bytes_including_framing_markers() {
-    let text = "שלום\n\x1b[200~literal\x1b[201~";
-    assert_eq!(paste_bytes(text, false), text.as_bytes());
-    assert_eq!(
-        paste_bytes(text, true),
-        format!("\x1b[200~{text}\x1b[201~").as_bytes()
-    );
 }
 
 #[test]

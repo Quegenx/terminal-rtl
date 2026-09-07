@@ -7,11 +7,11 @@
 | macOS arm64 | Local debug/release, PTY lifecycle/geometry, Node 18.0 and 24, Bun 1.4.2, xterm.js |
 | Rust 1.88 | Local tests and Windows GNU cross-check of the locked graph |
 | Windows x64 GNU | Local cross-build; native runtime remains unverified |
-| Windows x64 MSVC | CI configured; new source must pass on a native runner |
-| Linux x64 | CI configured; new source must pass on its runner; no bundled Linux binary |
+| Windows x64 MSVC | 0.1.6 native CI and extracted-package checks passed; new source requires revalidation |
+| Linux x64 | 0.1.6 source CI passed; no bundled Linux binary |
 | Actual Codex/Grok conversations and accessibility | Not certified by synthetic tests |
 
-Local final validation on 2026-09-07:
+Pre-release local validation on 2026-09-07:
 
 - `cargo test --all-targets --locked`: 64 passes from a clean source snapshot;
   `cargo +1.88.0 test --all-targets --locked`: 64 passes.
@@ -28,11 +28,11 @@ Local final validation on 2026-09-07:
   This local validation archive contains a GNU Windows cross-build; it is not
   qualified for publication. Existing repository native binaries were preserved.
 
-The source baseline was committed as `9693af3` while remediation was in progress.
-The latest inspected baseline run, [34094593174](https://github.com/Quegenx/terminal-rtl/actions/runs/34094593174),
-still failed before these fixes. Its downloaded macOS artifact contains a single
-root `rtl` file, confirming the existing flattening layout. No artifact copy
-layout change was needed. There was no Windows or npm package artifact for it.
+Release 0.1.6 passed all eight jobs in
+[CI run 34110241764](https://github.com/Quegenx/terminal-rtl/actions/runs/34110241764)
+at commit `76cf5a3`, including macOS and Windows extracted-package checks.
+The published archive came from that run. This evidence applies to the release
+commit; subsequent source changes require their own validation.
 
 The updated workflow checks all three OSes, minimum runtime versions, notices,
 and advisories before assembling `npm-package`. Separate macOS/Windows jobs

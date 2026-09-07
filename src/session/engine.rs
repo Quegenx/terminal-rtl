@@ -131,7 +131,7 @@ impl TerminalSession<'_> {
                             writer.flush()?;
                         }
                     }
-                    Ok(ChildOutput::End) | Err(TryRecvError::Disconnected) => {
+                    Err(TryRecvError::Disconnected) => {
                         eof = true;
                         break;
                     }

@@ -201,12 +201,10 @@ fn scrollback_view_does_not_change_live_content() {
     let mut parser = vt100::Parser::new(2, 20, 20);
     parser.process("אחד\r\nשתיים\r\nשלוש\r\nארבע".as_bytes());
     let live = parser.screen().contents();
-    let mut history = parser.screen().clone();
-    history.set_scrollback(2);
     let mut renderer = Renderer::default();
     let mut bytes = Vec::new();
     renderer
-        .render(&history, true, Direction::Auto, &mut bytes)
+        .render_scrollback(parser.screen(), 2, true, Direction::Auto, &mut bytes)
         .unwrap();
     let mut host = vt100::Parser::new(2, 20, 0);
     host.process(&bytes);

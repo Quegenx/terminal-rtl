@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 — 2026-09-07
+
+- Simplify child-output EOF handling and consolidate repeated test setup.
+- Keep the public README focused on installation, usage, and known limitations.
+
 ## 0.1.6 — 2026-09-07
 
 - Preserve native Windows key modifiers and bracketed paste across console reads.
@@ -30,4 +35,4 @@
 - Declare Rust 1.88, scope Base64 to Windows, generate/verify notices, and add
   advisory and extracted-package gates to CI.
 
-Native Windows/updated remote CI and live-agent qualification remain release gates.
+Release validation and remaining limitations are documented in [Releases](releases.md).

@@ -1,7 +1,7 @@
 {
   "name": "terminal-rtl",
   "description": "Hebrew RTL display correction and lightweight formatting for native terminal AI agents.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "engines": {
     "node": ">=18"
