@@ -97,9 +97,6 @@ impl PtyHarness {
         command.cwd(&cwd);
         command.env("RTL_TEST_EXPECTED_CWD", cwd);
         command.env("RTL_TEST_SCENARIO", scenario);
-        if matches!(scenario, "wheel" | "paste-boundary") {
-            command.env("RTL_TEST_NATIVE_TRACE", "1");
-        }
         command.env_remove("RTL_ACTIVE");
         command.args(options);
         if scenario == "inline-history" || scenario == "inline-burst" {
@@ -252,7 +249,6 @@ impl PtyHarness {
 impl Drop for PtyHarness {
     fn drop(&mut self) {
         let _ = self.child.kill();
-        super::fixture_input::report_native_trace(self.child.process_id());
         if let Some(path) = &self.geometry_trace {
             let _ = std::fs::remove_file(path);
         }

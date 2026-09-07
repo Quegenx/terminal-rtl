@@ -49,6 +49,13 @@ They use Node 24 / ESM; use current GitHub-hosted runners (minimum runner 2.327.
 authenticated checkout in Docker needs 2.329.0). These runtime updates are
 separate from the ConPTY cursor-handshake fix.
 
+Windows input qualification covers normal bracketed paste and native key events.
+Older ConPTY versions can discard unfinished VT sequences between pipe writes,
+before the application receives them. The fragmented-paste test therefore uses
+complete Win32 envelopes on Windows while splitting the enclosed paste delimiters
+across console records. The decoder also checks Hebrew, emoji, nested openers,
+and literal control characters without interpreting them as shortcuts.
+
 ## Packaging
 
 The supported release path uses the native macOS arm64 and Windows x64 MSVC CI

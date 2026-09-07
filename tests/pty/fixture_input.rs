@@ -43,15 +43,3 @@ pub(super) fn trace_geometry(dimensions: (u16, u16), stage: &str) {
         writeln!(file, "{dimensions:?}: {stage}").unwrap();
     }
 }
-
-pub(super) fn report_native_trace(pid: Option<u32>) {
-    if let Some(pid) = pid {
-        let path = std::env::temp_dir().join(format!("rtl-native-input-{pid}.trace"));
-        if std::thread::panicking()
-            && let Ok(trace) = std::fs::read_to_string(&path)
-        {
-            eprintln!("NATIVE_RECORDS_START\n{trace}NATIVE_RECORDS_END");
-        }
-        let _ = std::fs::remove_file(path);
-    }
-}

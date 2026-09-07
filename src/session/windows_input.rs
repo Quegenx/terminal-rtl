@@ -14,6 +14,7 @@ use windows_sys::Win32::System::Console::*;
 
 pub(super) struct HostInputReader {
     ready: VecDeque<HostInput>,
+    transport: Vec<u16>,
     opener: Vec<u16>,
     paste: Option<Vec<u16>>,
     last_key: Instant,
@@ -24,6 +25,7 @@ impl HostInputReader {
     pub(super) fn new() -> Self {
         Self {
             ready: VecDeque::new(),
+            transport: Vec::new(),
             opener: Vec::new(),
             paste: None,
             last_key: Instant::now(),
@@ -82,6 +84,10 @@ impl HostInputReader {
         }
         // Only a lone Escape is ambiguous with an Escape key press. A partial
         // CSI can span console reads and must survive arbitrary scheduling delays.
+        if self.transport == [27] && self.last_key.elapsed() >= Duration::from_millis(100) {
+            self.transport.clear();
+            self.opener.push(27);
+        }
         if self.opener == [27] && self.last_key.elapsed() >= Duration::from_millis(100) {
             self.flush_opener();
         }
@@ -93,43 +99,50 @@ impl HostInputReader {
     }
 
     fn accept_key(&mut self, key: KEY_EVENT_RECORD) {
-        #[cfg(debug_assertions)]
-        if std::env::var_os("RTL_TEST_NATIVE_TRACE").is_some() {
-            use std::io::Write;
-            let path =
-                std::env::temp_dir().join(format!("rtl-native-input-{}.trace", std::process::id()));
-            let mut file = std::fs::OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(path)
-                .unwrap();
-            writeln!(
-                file,
-                "{},{},{},{},{},{}",
-                key.wVirtualKeyCode,
-                key.wVirtualScanCode,
-                unsafe { key.uChar.UnicodeChar },
-                key.bKeyDown,
-                key.dwControlKeyState,
-                key.wRepeatCount
-            )
-            .unwrap();
+        self.last_key = Instant::now();
+        if key.wVirtualKeyCode != 0 {
+            self.accept_native_key(key);
+            return;
         }
-        // Ignore release events as on the existing crossterm input path, except
-        // Alt-code releases, whose UnicodeChar is the actual typed character.
-        let alt_code =
-            key.wVirtualKeyCode == 18 && key.bKeyDown == 0 && unsafe { key.uChar.UnicodeChar } != 0;
-        if key.bKeyDown == 0 && !alt_code {
+        if key.bKeyDown == 0 {
             return;
         }
         let unit = unsafe { key.uChar.UnicodeChar };
-        if matches!(key.wVirtualKeyCode, 16..=18) && unit == 0 {
-            return; // Modifier transitions must not consume the Ctrl+] prefix.
-        }
-        if key.wVirtualKeyCode != 0 {
-            self.ready.push_back(native_key_input(key));
+        if self.transport.is_empty() && unit != 27 {
+            self.accept_text_key(key);
             return;
         }
+        self.transport.push(unit);
+        if sequence_complete(&self.transport) {
+            let sequence = std::mem::take(&mut self.transport);
+            if let ConsoleSequence::Key(key) = decode_console_sequence(&sequence) {
+                self.accept_native_key(key);
+            } else {
+                for unit in sequence {
+                    self.accept_text_key(text_key(unit));
+                }
+            }
+        }
+    }
+
+    fn accept_native_key(&mut self, key: KEY_EVENT_RECORD) {
+        let unit = unsafe { key.uChar.UnicodeChar };
+        let alt_code = key.wVirtualKeyCode == 18 && unit != 0;
+        if (key.bKeyDown == 0 && !alt_code) || (matches!(key.wVirtualKeyCode, 16..=18) && unit == 0)
+        {
+            return;
+        }
+        // Older ConPTY versions wrap VT mouse/paste characters in Win32 key
+        // envelopes too. Decode that transport before interpreting the VT text.
+        if key.wVirtualKeyCode == 0 || self.paste.is_some() {
+            self.accept_text_key(key);
+        } else {
+            self.ready.push_back(native_key_input(key));
+        }
+    }
+
+    fn accept_text_key(&mut self, key: KEY_EVENT_RECORD) {
+        let unit = unsafe { key.uChar.UnicodeChar };
         self.last_key = Instant::now();
         if let Some(text) = &mut self.paste {
             text.extend(std::iter::repeat_n(
@@ -156,12 +169,7 @@ impl HostInputReader {
             return;
         }
         self.opener.push(unit);
-        let complete = if self.opener.get(1) == Some(&91) {
-            self.opener.len() > 2 && (64..=126).contains(&unit)
-        } else {
-            self.opener.len() > 2 || unit != 79
-        };
-        if complete || self.opener.len() >= 128 {
+        if sequence_complete(&self.opener) {
             let sequence = std::mem::take(&mut self.opener);
             match decode_console_sequence(&sequence) {
                 ConsoleSequence::Key(key) => {
@@ -236,3 +244,27 @@ fn native_key_input(key: KEY_EVENT_RECORD) -> HostInput {
         native_key: Some(native.into_bytes()),
     }
 }
+
+fn sequence_complete(units: &[u16]) -> bool {
+    if units.len() >= 128 {
+        return true;
+    }
+    if units.get(1) == Some(&91) {
+        units.len() > 2 && units.last().is_some_and(|unit| (64..=126).contains(unit))
+    } else {
+        units.len() > 2 || (units.len() == 2 && units[1] != 79)
+    }
+}
+
+fn text_key(unit: u16) -> KEY_EVENT_RECORD {
+    KEY_EVENT_RECORD {
+        bKeyDown: 1,
+        wRepeatCount: 1,
+        uChar: KEY_EVENT_RECORD_0 { UnicodeChar: unit },
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+#[path = "../../tests/terminal/windows_input.rs"]
+mod tests;

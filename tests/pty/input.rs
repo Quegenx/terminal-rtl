@@ -77,7 +77,19 @@ fn actual_paste_parser_respects_host_framing_across_chunks() {
         b"0~safe\x1b[200~inside\x1b[2",
         b"01~AFTER",
     ] {
+        #[cfg(unix)]
         harness.send(bytes);
+        #[cfg(windows)]
+        {
+            // Older ConPTY drops an unfinished VT sequence between pipe writes.
+            // Native envelopes preserve each supplied console character while
+            // the paste delimiter still crosses multiple application reads.
+            let framed: String = bytes
+                .iter()
+                .map(|byte| format!("\x1b[0;0;{byte};1;0;1_"))
+                .collect();
+            harness.send(framed.as_bytes());
+        }
         thread::sleep(Duration::from_millis(20));
     }
     let code = harness.finish();
