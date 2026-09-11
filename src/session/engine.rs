@@ -75,7 +75,10 @@ impl TerminalSession<'_> {
         let mut sync_started = None;
 
         let mut last_size_check = Instant::now();
-        let mut out = io::stdout();
+        let stdout = io::stdout();
+        // Keep inline-history line feeds from becoming one host PTY write each.
+        // Renderer flushes still preserve frame-level visibility and backpressure.
+        let mut out = io::BufWriter::with_capacity(64 * 1024, stdout.lock());
         loop {
             if let Some(code) = shutdown.exit_code()
                 && shutdown_time.is_none()

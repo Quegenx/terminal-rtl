@@ -12,6 +12,7 @@ pub struct Renderer {
     pretty: bool,
     layout: Layout,
     attribution: bool,
+    attribution_drawn: bool,
     agent_label: Option<String>,
     labels: Vec<Option<String>>,
     formats: Vec<super::formatting::RowFormat>,
@@ -59,6 +60,7 @@ impl Renderer {
         self.settings = None;
         self.formats.clear();
         self.labels.clear();
+        self.attribution_drawn = false;
     }
 
     pub fn logical_column(&self, row: u16, col: u16) -> u16 {
@@ -142,8 +144,21 @@ impl Renderer {
             // at the bottom of the full viewport saves the top row to history.
             write!(out, "\x1b[0m\x1b[K\x1b[{};1H\r\n", host_size.1)?;
         }
-        self.invalidate();
+        self.shift_cache_after_host_scroll(rows.len());
         Ok(())
+    }
+
+    fn shift_cache_after_host_scroll(&mut self, count: usize) {
+        let source = count.min(self.source.len());
+        self.source.drain(..source);
+        let rows = count.min(self.rows.len());
+        self.rows.drain(..rows);
+        let formats = count.min(self.formats.len());
+        self.formats.drain(..formats);
+        let labels = count.min(self.labels.len());
+        self.labels.drain(..labels);
+        self.cursor = None;
+        self.attribution_drawn = false;
     }
 
     /// Emit changed rows only. Host autowrap is disabled by the session guard:
@@ -219,7 +234,7 @@ impl Renderer {
         if !updates.is_empty() || self.cursor != Some(cursor) {
             out.write_all(b"\x1b[?25l")?;
             out.write_all(&updates)?;
-            if self.attribution {
+            if self.attribution && !self.attribution_drawn {
                 let credit = "Powered by: Gal Havkin";
                 let visible = &credit[..credit.len().min(usize::from(width + self.margin()))];
                 write!(
@@ -228,6 +243,7 @@ impl Renderer {
                     height + 1,
                     visible
                 )?;
+                self.attribution_drawn = true;
             }
             write!(out, "\x1b[0m\x1b[{};{}H", row + 1, visual_col + 1)?;
             if !cursor.2 {

@@ -236,6 +236,22 @@ fn attribution_stays_below_native_content_across_redraw_and_resize() {
 }
 
 #[test]
+fn unchanged_attribution_is_not_repainted() {
+    let mut parser = vt100::Parser::new(3, 40, 0);
+    let mut renderer = Renderer::default();
+    renderer.set_attribution(true);
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut Vec::new())
+        .unwrap();
+    parser.process(b"update");
+    let mut bytes = Vec::new();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut bytes)
+        .unwrap();
+    assert!(!String::from_utf8(bytes).unwrap().contains("Powered by"));
+}
+
+#[test]
 fn grok_minimal_labels_plain_replies_without_labeling_status_or_input_continuations() {
     let mut parser = vt100::Parser::new(16, 72, 0);
     parser.process("❯ hello\r\ncontinued user input\r\n\r\n┃◆ Thought for 0.2s\r\n┃thinking text\r\nhello\r\nWorked for 1.5s\r\n\r\n❯ second message\r\n\r\nplain reply\r\nminimal · /help\r\n❯\r\nGrok 4.6 (high) · ctrl+o transcript".as_bytes());

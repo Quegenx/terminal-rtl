@@ -222,3 +222,31 @@ fn top_scroll_region_keeps_resumed_transcript_above_the_composer() {
     assert_eq!(parser.screen().scrollback(), 1);
     assert_eq!(parser.screen().rows(0, 30).next().unwrap(), "RESTORED_0");
 }
+
+#[test]
+fn inline_history_keeps_shifted_rows_cached() {
+    let mut parser = vt100::Parser::new(4, 20, 100);
+    parser.process(b"ROW_A\r\nROW_B\r\nROW_C\r\nROW_D");
+    let mut renderer = Renderer::default();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut Vec::new())
+        .unwrap();
+
+    let mut history = Vec::new();
+    parser
+        .process_with_history(b"\r\nROW_E", |rows| {
+            renderer.append_history(rows, (20, 4), true, Direction::Auto, &mut history)
+        })
+        .unwrap();
+    let mut redraw = Vec::new();
+    renderer
+        .render(parser.screen(), true, Direction::Auto, &mut redraw)
+        .unwrap();
+
+    let redraw = String::from_utf8(redraw).unwrap();
+    assert!(redraw.contains("ROW_E"));
+    assert!(
+        !redraw.contains("ROW_B"),
+        "shifted rows must not be redrawn"
+    );
+}

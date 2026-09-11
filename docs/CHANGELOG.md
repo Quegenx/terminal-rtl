@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 — 2026-09-11
+
+- Coalesce host-terminal writes at frame boundaries during inline streaming.
+- Preserve shifted render-cache rows after delivering inline history instead of
+  repainting the full viewport.
+- Avoid repainting an unchanged attribution footer on every frame.
+
 ## 0.1.7 — 2026-09-07
 
 - Simplify child-output EOF handling and consolidate repeated test setup.
